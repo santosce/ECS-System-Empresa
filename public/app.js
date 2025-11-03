@@ -1323,7 +1323,50 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 return inicio <= periodoFim && fim >= periodoInicio;
             });
 
-            const percentualNoPeriodo = alocacoesNoPeriodo.reduce((sum, a) => sum + (parseInt(a.percentual) || 0), 0);
+            // ✅ CALCULAR SOBREPOSIÇÃO REAL - não apenas somar
+            let percentualNoPeriodo = 0;
+
+            if (alocacoesNoPeriodo.length > 0) {
+                // Pegar todos os dias únicos das alocações
+                const datasUnicas = new Set();
+                alocacoesNoPeriodo.forEach(a => {
+                    const inicio = new Date(a.dataInicio + 'T00:00:00');
+                    const fim = new Date(a.dataFim + 'T00:00:00');
+                    
+                    // Limitar ao período do filtro
+                    const inicioReal = inicio < periodoInicio ? periodoInicio : inicio;
+                    const fimReal = fim > periodoFim ? periodoFim : fim;
+                    
+                    // Adicionar cada dia
+                    for (let d = new Date(inicioReal); d <= fimReal; d.setDate(d.getDate() + 1)) {
+                        datasUnicas.add(d.toISOString().split('T')[0]);
+                    }
+                });
+                
+                // Para cada dia, calcular o percentual total alocado
+                let maxPercentual = 0;
+                datasUnicas.forEach(dia => {
+                    const diaDate = new Date(dia + 'T00:00:00');
+                    let percentualDia = 0;
+                    
+                    alocacoesNoPeriodo.forEach(a => {
+                        const inicio = new Date(a.dataInicio + 'T00:00:00');
+                        const fim = new Date(a.dataFim + 'T00:00:00');
+                        
+                        // Se a alocação está ativa neste dia, somar
+                        if (diaDate >= inicio && diaDate <= fim) {
+                            percentualDia += parseInt(a.percentual) || 0;
+                        }
+                    });
+                    
+                    // Guardar o maior percentual encontrado
+                    if (percentualDia > maxPercentual) {
+                        maxPercentual = percentualDia;
+                    }
+                });
+                
+                percentualNoPeriodo = maxPercentual;
+            }
             
             const status = percentualNoPeriodo === 0 ? 'Disponível' : 
                           percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
