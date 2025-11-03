@@ -1274,163 +1274,150 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 
     function updateProfissionaisAllocationTable() {
-        const tbody = document.getElementById('dashboard-profissionais-table');
-        if (!tbody) return;
+    const tbody = document.getElementById('dashboard-profissionais-table');
+    if (!tbody) return;
 
-        const filterNome = document.getElementById('dashboard-filter-nome')?.value.toLowerCase() || '';
-        const filterTime = document.getElementById('dashboard-filter-time')?.value || '';
-        const filterLider = document.getElementById('dashboard-filter-lider')?.value || '';
-        const filterProjeto = document.getElementById('dashboard-filter-projeto')?.value || '';
-        const filterInicio = document.getElementById('dashboard-filter-inicio')?.value || '';
-        const filterFim = document.getElementById('dashboard-filter-fim')?.value || '';
+    const filterNome = document.getElementById('dashboard-filter-nome')?.value.toLowerCase() || '';
+    const filterTime = document.getElementById('dashboard-filter-time')?.value || '';
+    const filterLider = document.getElementById('dashboard-filter-lider')?.value || '';
+    const filterProjeto = document.getElementById('dashboard-filter-projeto')?.value || '';
+    const filterInicio = document.getElementById('dashboard-filter-inicio')?.value || '';
+    const filterFim = document.getElementById('dashboard-filter-fim')?.value || '';
 
-        const temFiltroPeriodo = filterInicio && filterFim;
-        let periodoInicio, periodoFim;
-        
-        if (temFiltroPeriodo) {
-            periodoInicio = new Date(filterInicio + 'T00:00:00');
-            periodoFim = new Date(filterFim + 'T00:00:00');
-        } else {
-            periodoInicio = new Date();
-            periodoInicio.setHours(0, 0, 0, 0);
-            periodoFim = new Date(periodoInicio);
+    const temFiltroPeriodo = filterInicio && filterFim;
+    let periodoInicio, periodoFim;
+    
+    if (temFiltroPeriodo) {
+        periodoInicio = new Date(filterInicio + 'T00:00:00');
+        periodoFim = new Date(filterFim + 'T00:00:00');
+    } else {
+        periodoInicio = new Date();
+        periodoInicio.setHours(0, 0, 0, 0);
+        periodoFim = new Date(periodoInicio);
+    }
+
+    let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
+
+    if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
+    if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
+    if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
+
+    const rows = filtered.map(prof => {
+        let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
+
+        if (filterProjeto) {
+            alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
         }
 
-        let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
-
-        if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
-        if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
-        if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
-
-        const rows = filtered.map(prof => {
-            let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
-
-            if (filterProjeto) {
-                alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
-            }
-
-            if (temFiltroPeriodo) {
-                alocacoes = alocacoes.filter(a => {
-                    const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-                    const alocFim = new Date(a.dataFim + 'T00:00:00');
-                    return alocInicio <= periodoFim && alocFim >= periodoInicio;
-                });
-            }
-
-            const alocacoesNoPeriodo = alocacoes.filter(a => {
-                const inicio = new Date(a.dataInicio + 'T00:00:00');
-                const fim = new Date(a.dataFim + 'T00:00:00');
-                return inicio <= periodoFim && fim >= periodoInicio;
+        if (temFiltroPeriodo) {
+            alocacoes = alocacoes.filter(a => {
+                const alocInicio = new Date(a.dataInicio + 'T00:00:00');
+                const alocFim = new Date(a.dataFim + 'T00:00:00');
+                return alocInicio <= periodoFim && alocFim >= periodoInicio;
             });
+        }
 
-            // ✅ CALCULAR SOBREPOSIÇÃO REAL - não apenas somar
-            let percentualNoPeriodo = 0;
-
-            if (alocacoesNoPeriodo.length > 0) {
-                // Pegar todos os dias únicos das alocações
-                const datasUnicas = new Set();
-                alocacoesNoPeriodo.forEach(a => {
-                    const inicio = new Date(a.dataInicio + 'T00:00:00');
-                    const fim = new Date(a.dataFim + 'T00:00:00');
-                    
-                    // Limitar ao período do filtro
-                    const inicioReal = inicio < periodoInicio ? periodoInicio : inicio;
-                    const fimReal = fim > periodoFim ? periodoFim : fim;
-                    
-                    // Adicionar cada dia
-                    for (let d = new Date(inicioReal); d <= fimReal; d.setDate(d.getDate() + 1)) {
-                        datasUnicas.add(d.toISOString().split('T')[0]);
-                    }
-                });
-                
-                // Para cada dia, calcular o percentual total alocado
-                let maxPercentual = 0;
-                datasUnicas.forEach(dia => {
-                    const diaDate = new Date(dia + 'T00:00:00');
-                    let percentualDia = 0;
-                    
-                    alocacoesNoPeriodo.forEach(a => {
-                        const inicio = new Date(a.dataInicio + 'T00:00:00');
-                        const fim = new Date(a.dataFim + 'T00:00:00');
-                        
-                        // Se a alocação está ativa neste dia, somar
-                        if (diaDate >= inicio && diaDate <= fim) {
-                            percentualDia += parseInt(a.percentual) || 0;
-                        }
-                    });
-                    
-                    // Guardar o maior percentual encontrado
-                    if (percentualDia > maxPercentual) {
-                        maxPercentual = percentualDia;
-                    }
-                });
-                
-                percentualNoPeriodo = maxPercentual;
-            }
-            
-            const status = percentualNoPeriodo === 0 ? 'Disponível' : 
-                          percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
-                          'Parcialmente Alocado';
-            const statusColor = percentualNoPeriodo === 0 ? 'text-green-600' : 
-                               percentualNoPeriodo >= 100 ? 'text-blue-600' : 
-                               'text-yellow-600';
-
-            const projetos = alocacoes.map(a => {
-                const proj = appState.projetos.find(p => p.id === a.projetoId);
-                return proj?.nome || 'N/A';
-            });
-            const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
-
-            let proximaDisponibilidade;
-            
-            // ✅ Pegar TODAS as alocações do profissional para calcular disponibilidade corretamente
-            const todasAlocacoesProfissional = appState.alocacoes.filter(a => a.profissionalId === prof.id);
-            
-            if (percentualNoPeriodo === 0) {
-                // Verificar se há alocações futuras
-                const alocacoesFuturas = todasAlocacoesProfissional
-                    .filter(a => new Date(a.dataInicio + 'T00:00:00') > periodoFim)
-                    .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
-                
-                if (alocacoesFuturas.length > 0) {
-                    const proximaAlocacao = alocacoesFuturas[0];
-                    proximaDisponibilidade = `Disponível até ${formatDate(proximaAlocacao.dataInicio)}`;
-                } else {
-                    proximaDisponibilidade = 'Disponível agora';
-                }
-            } else if (percentualNoPeriodo >= 100) {
-                // ✅ Pegar a última alocação considerando TODAS as alocações do profissional
-                const todasAlocacoesOrdenadas = todasAlocacoesProfissional
-                    .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
-                
-                if (todasAlocacoesOrdenadas.length > 0) {
-                    const ultimaAlocacao = todasAlocacoesOrdenadas[0];
-                    const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
-                    dataTermino.setDate(dataTermino.getDate() + 1);
-                    proximaDisponibilidade = `A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
-                } else {
-                    proximaDisponibilidade = 'Verificar alocações';
-                }
-            } else {
-                const disponivel = 100 - percentualNoPeriodo;
-                proximaDisponibilidade = `${disponivel}% disponível no período`;
-            }
-
-            return `
-                <tr class="bg-white border-b hover:bg-gray-50">
-                    <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
-                    <td class="px-6 py-4">${prof.perfil}</td>
-                    <td class="px-6 py-4">${prof.time}</td>
-                    <td class="px-6 py-4">${projetosUnicos}</td>
-                    <td class="px-6 py-4 ${statusColor} font-semibold">${status}</td>
-                    <td class="px-6 py-4">${percentualNoPeriodo}%</td>
-                    <td class="px-6 py-4">${proximaDisponibilidade}</td>
-                </tr>
-            `;
+        const alocacoesNoPeriodo = alocacoes.filter(a => {
+            const inicio = new Date(a.dataInicio + 'T00:00:00');
+            const fim = new Date(a.dataFim + 'T00:00:00');
+            return inicio <= periodoFim && fim >= periodoInicio;
         });
 
-        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-    }
+        // ✅ CORREÇÃO: CALCULAR SOBREPOSIÇÃO REAL DIA A DIA
+        let percentualNoPeriodo = 0;
+
+        for (let d = new Date(periodoInicio); d <= periodoFim; d.setDate(d.getDate() + 1)) {
+            let percentualDia = 0;
+            
+            alocacoesNoPeriodo.forEach(aloc => {
+                const inicio = new Date(aloc.dataInicio + 'T00:00:00');
+                const fim = new Date(aloc.dataFim + 'T00:00:00');
+                
+                if (d >= inicio && d <= fim) {
+                    percentualDia += parseInt(aloc.percentual) || 0;
+                }
+            });
+            
+            if (percentualDia > percentualNoPeriodo) {
+                percentualNoPeriodo = percentualDia;
+            }
+        }
+        
+        const status = percentualNoPeriodo === 0 ? 'Disponível' : 
+                      percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
+                      'Parcialmente Alocado';
+        const statusColor = percentualNoPeriodo === 0 ? 'text-green-600' : 
+                           percentualNoPeriodo >= 100 ? 'text-blue-600' : 
+                           'text-yellow-600';
+
+        const projetos = alocacoes.map(a => {
+            const proj = appState.projetos.find(p => p.id === a.projetoId);
+            return proj?.nome || 'N/A';
+        });
+        const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
+
+        let proximaDisponibilidade;
+        
+        if (percentualNoPeriodo === 0) {
+            proximaDisponibilidade = 'Disponível agora';
+        } else if (percentualNoPeriodo >= 100) {
+            const alocacoesAtivas = alocacoesNoPeriodo
+                .filter(a => new Date(a.dataFim + 'T00:00:00') >= periodoInicio)
+                .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
+            
+            if (alocacoesAtivas.length > 0) {
+                const ultimaAlocacao = alocacoesAtivas[0];
+                const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
+                dataTermino.setDate(dataTermino.getDate() + 1);
+                proximaDisponibilidade = `A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
+            } else {
+                proximaDisponibilidade = 'Verificar alocações';
+            }
+        } else {
+            const disponivel = 100 - percentualNoPeriodo;
+            proximaDisponibilidade = `${disponivel}% disponível no período`;
+        }
+
+        // ✅ FORMATAÇÃO VISUAL COM ALERTA DE SOBRE-ALOCAÇÃO
+        let alocacaoDisplay;
+        let alocacaoClass;
+        let alocacaoTitle;
+        
+        if (percentualNoPeriodo === 0) {
+            alocacaoDisplay = '0%';
+            alocacaoClass = 'text-gray-600';
+            alocacaoTitle = 'Nenhuma alocação no período';
+        } else if (percentualNoPeriodo > 100) {
+            alocacaoDisplay = '100% ⚠️';
+            alocacaoClass = 'text-red-600 font-bold';
+            alocacaoTitle = `⚠️ SOBRE-ALOCADO: ${percentualNoPeriodo}% máximo em algum dia (${alocacoesNoPeriodo.length} alocações)`;
+        } else if (percentualNoPeriodo === 100) {
+            alocacaoDisplay = '100%';
+            alocacaoClass = 'text-blue-600 font-semibold';
+            alocacaoTitle = 'Totalmente alocado no período';
+        } else {
+            alocacaoDisplay = `${percentualNoPeriodo}%`;
+            alocacaoClass = 'text-yellow-600';
+            alocacaoTitle = `${percentualNoPeriodo}% máximo de alocação no período`;
+        }
+
+        return `
+            <tr class="bg-white border-b hover:bg-gray-50">
+                <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
+                <td class="px-6 py-4">${prof.perfil}</td>
+                <td class="px-6 py-4">${prof.time}</td>
+                <td class="px-6 py-4">${projetosUnicos}</td>
+                <td class="px-6 py-4 ${statusColor} font-semibold">${status}</td>
+                <td class="px-6 py-4 ${alocacaoClass}" title="${alocacaoTitle}" style="cursor: help;">
+                    ${alocacaoDisplay}
+                </td>
+                <td class="px-6 py-4">${proximaDisponibilidade}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
+}
 
     function updateProjetosTable() {
         const tbody = document.getElementById('dashboard-projetos-table');
