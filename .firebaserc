@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "ecs-sistema-capacity",
+    "prd": "ecs-capacity-system",
+    "dev": "ecs-sistema-capacity-dev"
+  },
+  "targets": {},
+  "etags": {}
+}

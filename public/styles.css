@@ -1,0 +1,816 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6;
+}
+
+::-webkit-scrollbar { 
+    width: 8px; 
+    height: 8px; 
+}
+
+::-webkit-scrollbar-track { 
+    background: #f1f1f1; 
+}
+
+::-webkit-scrollbar-thumb { 
+    background: #d1d5db; 
+    border-radius: 10px; 
+}
+
+::-webkit-scrollbar-thumb:hover { 
+    background: #9ca3af; 
+}
+
+.view { 
+    display: none; 
+}
+
+.view.active { 
+    display: block; 
+}
+
+.modal-backdrop { 
+    background-color: rgba(0,0,0,0.5); 
+    transition: opacity 0.3s ease-in-out; 
+}
+
+/* ========================================
+   SISTEMA DE ABAS DO DASHBOARD
+   ======================================== */
+
+.dashboard-tab {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.dashboard-tab:hover {
+    background-color: #f9fafb;
+}
+
+.dashboard-tab.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+}
+
+.dashboard-tab-content {
+    animation: fadeInTab 0.3s ease-in-out;
+}
+
+@keyframes fadeInTab {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========================================
+   ESTILOS PARA A LINHA DO DIA ATUAL (TIMELINE)
+   ======================================== */
+
+.today-line {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Efeito de pulso sutil na linha do dia atual */
+.today-line::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: -3px;
+    right: -3px;
+    bottom: -5px;
+    background: rgba(239, 68, 68, 0.1);
+    animation: pulse 2s ease-in-out infinite;
+    border-radius: 2px;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.1;
+    }
+}
+
+/* ========================================
+   ESTILOS CUSTOMIZADOS PARA TOASTIFY
+   ======================================== */
+
+.toastify {
+    padding: 14px 20px !important;
+    font-family: 'Inter', sans-serif !important;
+    min-width: 300px;
+    max-width: 400px;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.toastify-right {
+    right: 20px !important;
+}
+
+.toastify-top {
+    top: 20px !important;
+}
+
+.toastify-left {
+    left: 20px !important;
+}
+
+.toastify-bottom {
+    bottom: 20px !important;
+}
+
+.toastify-center {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+}
+
+.toastify-close {
+    opacity: 0.8 !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    padding: 0 8px !important;
+    transition: opacity 0.2s !important;
+}
+
+.toastify-close:hover {
+    opacity: 1 !important;
+}
+
+/* Animação suave de entrada */
+.toastify.on {
+    animation: toastify-in 0.3s ease-out;
+}
+
+@keyframes toastify-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Animação suave de saída */
+.toastify.off {
+    animation: toastify-out 0.3s ease-in;
+}
+
+@keyframes toastify-out {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Estilos para diferentes tipos de notificações */
+.toastify.success {
+    background: linear-gradient(to right, #00b09b, #96c93d) !important;
+}
+
+.toastify.error {
+    background: linear-gradient(to right, #ff5f6d, #ffc371) !important;
+}
+
+.toastify.warning {
+    background: linear-gradient(to right, #f7971e, #ffd200) !important;
+}
+
+.toastify.info {
+    background: linear-gradient(to right, #667eea, #764ba2) !important;
+}
+
+/* ========================================
+   MELHORIAS GERAIS DE UI
+   ======================================== */
+
+/* Animação de fade para modais */
+.modal-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Melhorias nos botões */
+button {
+    transition: all 0.2s ease-in-out;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+/* Hover effect para as barras da timeline */
+#timeline-chart-container svg g rect {
+    cursor: pointer;
+    transition: opacity 0.2s ease-in-out;
+}
+
+#timeline-chart-container svg g rect:hover {
+    opacity: 0.8;
+}
+
+/* Loading spinner */
+.spinner {
+    border: 3px solid #f3f4f6;
+    border-top: 3px solid #4f46e5;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Skeleton loading */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Smooth transitions para elementos colapsáveis */
+.collapsible-content {
+    transition: all 0.3s ease-in-out;
+    overflow: hidden;
+}
+
+.collapsible-content.hidden {
+    max-height: 0;
+    opacity: 0;
+    padding: 0;
+    margin: 0;
+}
+
+/* Melhorias em inputs de formulário */
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    ring: 2px;
+    ring-color: #4f46e5;
+    border-color: #4f46e5;
+}
+
+/* Badge styles */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+/* Animação para gráficos */
+canvas {
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Melhorias em tabelas */
+table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+tr:hover {
+    transition: background-color 0.15s ease-in-out;
+}
+
+/* Estados de carregamento */
+.loading {
+    pointer-events: none;
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Estilo para os filtros da timeline */
+#timeline-filter-profissional,
+#timeline-filter-projeto,
+#timeline-filter-perfil {
+    transition: border-color 0.2s ease-in-out;
+}
+
+#timeline-filter-profissional:focus,
+#timeline-filter-projeto:focus,
+#timeline-filter-perfil:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* Container da timeline com posição relativa para a linha do dia atual */
+#timeline-chart-container {
+    position: relative;
+}
+
+/* ========================================
+   ESTILOS PARA FILTROS AVANÇADOS
+   ======================================== */
+
+#filtros-profissional,
+#filtros-projeto {
+    transition: all 0.3s ease-in-out;
+    overflow: hidden;
+}
+
+#filtros-profissional.hidden,
+#filtros-projeto.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+}
+
+#filtros-profissional:not(.hidden),
+#filtros-projeto:not(.hidden) {
+    animation: slideDown 0.3s ease-in-out;
+}
+
+@keyframes slideDown {
+    from {
+        max-height: 0;
+        opacity: 0;
+    }
+    to {
+        max-height: 500px;
+        opacity: 1;
+    }
+}
+
+/* ========================================
+   ESTILOS PARA TABELAS COM SCROLL
+   ======================================== */
+
+.overflow-x-auto.max-h-96 {
+    position: relative;
+}
+
+.overflow-x-auto.max-h-96 thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #f9fafb;
+}
+
+/* ========================================
+   MELHORIAS DE ACESSIBILIDADE
+   ======================================== */
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Focus visible para acessibilidade */
+*:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+}
+
+/* ========================================
+   ANIMAÇÃO SUAVE AO MUDAR DE VIEW
+   ======================================== */
+
+.view {
+    animation: fadeInView 0.3s ease-in-out;
+}
+
+@keyframes fadeInView {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========================================
+   MELHORAR A APARÊNCIA DOS SELECTS
+   ======================================== */
+
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+/* ========================================
+   ESTILOS ESPECÍFICOS DO DASHBOARD OTIMIZADO
+   ======================================== */
+
+/* Cards de métricas com hover effect */
+#dashboard .bg-white.p-6.rounded-lg.shadow-sm {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+#dashboard .bg-white.p-6.rounded-lg.shadow-sm:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilo para os gráficos em fundo cinza */
+.bg-gray-50.p-6.rounded-lg {
+    border: 1px solid #e5e7eb;
+}
+
+/* Botão de filtros avançados */
+button[onclick*="filtros"] {
+    transition: color 0.2s ease-in-out;
+}
+
+button[onclick*="filtros"]:hover {
+    text-decoration: underline;
+}
+
+button[onclick*="filtros"] svg {
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Estilo para as abas inativas */
+.dashboard-tab:not(.active) {
+    opacity: 0.7;
+}
+
+.dashboard-tab:not(.active):hover {
+    opacity: 1;
+}
+
+/* ========================================
+   ESTILOS PARA A PÁGINA DE BUSCAR DISPONIBILIDADE
+   ======================================== */
+
+#buscar-disponibilidade .bg-white {
+    border: 1px solid #e5e7eb;
+}
+
+#search-availability-btn {
+    transition: all 0.2s ease-in-out;
+}
+
+#search-availability-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+#availability-results {
+    min-height: 200px;
+}
+
+#availability-results:empty::after {
+    content: 'Nenhuma busca realizada ainda.';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #9ca3af;
+    font-size: 1rem;
+}
+
+/* ========================================
+   MELHORIAS VISUAIS PARA COLLAPSIBLE
+   ======================================== */
+
+.collapsible-header {
+    user-select: none;
+    transition: background-color 0.2s ease-in-out;
+    padding: 0.5rem;
+    margin: -0.5rem;
+    border-radius: 0.375rem;
+}
+
+.collapsible-header:hover {
+    background-color: #f9fafb;
+}
+
+.collapsible-header svg {
+    transition: transform 0.3s ease-in-out;
+}
+
+.collapsible-header svg.rotate-180 {
+    transform: rotate(180deg);
+}
+
+/* ========================================
+   RESPONSIVE IMPROVEMENTS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .toastify {
+        min-width: 280px;
+        max-width: calc(100vw - 40px);
+    }
+    
+    .toastify-right {
+        right: 10px !important;
+    }
+    
+    .toastify-left {
+        left: 10px !important;
+    }
+    
+    .toastify-top {
+        top: 10px !important;
+    }
+    
+    /* Ajustar linha do dia atual em telas menores */
+    .today-line {
+        width: 1px;
+    }
+    
+    .today-line > div {
+        font-size: 8px;
+        padding: 1px 4px;
+    }
+    
+    /* Ajustar abas do dashboard em mobile */
+    .dashboard-tab {
+        font-size: 0.75rem;
+        padding: 0.75rem 1rem;
+    }
+    
+    /* Tabelas responsivas */
+    .overflow-x-auto table {
+        font-size: 0.875rem;
+    }
+    
+    .overflow-x-auto th,
+    .overflow-x-auto td {
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    /* Cards empilhados em mobile */
+    #dashboard .grid {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Abas em coluna em telas muito pequenas */
+    .dashboard-tab {
+        flex: 1;
+        text-align: center;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+    .no-print,
+    .nav-link,
+    .add-btn,
+    .edit-btn,
+    .delete-btn,
+    #main-actions,
+    aside,
+    header {
+        display: none !important;
+    }
+    
+    .toastify {
+        display: none !important;
+    }
+    
+    .today-line {
+        display: none !important;
+    }
+    
+    .view {
+        display: block !important;
+    }
+    
+    main {
+        margin: 0;
+        padding: 1rem;
+    }
+    
+    .bg-white {
+        box-shadow: none;
+    }
+    
+    /* Forçar quebra de página entre seções */
+    .bg-white.p-6.rounded-lg.shadow-sm {
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+    
+    /* Ajustar cores para impressão */
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+/* ========================================
+   DARK MODE SUPPORT (PREPARADO PARA FUTURO)
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    /* Adicionar estilos dark mode aqui se necessário no futuro */
+}
+
+/* ========================================
+   UTILIDADES ADICIONAIS
+   ======================================== */
+
+/* Indicador de loading inline */
+.loading-inline {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f4f6;
+    border-top-color: #4f46e5;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Fade in genérico */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Slide up genérico */
+.slide-up {
+    animation: slideUp 0.3s ease-in-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Bounce suave */
+.bounce-soft {
+    animation: bounceSoft 0.5s ease-in-out;
+}
+
+@keyframes bounceSoft {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* ========================================
+   MELHORIAS FINAIS DE UX
+   ======================================== */
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Remover outline em cliques, manter em navegação por teclado */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Transição suave para mudanças de cor */
+* {
+    transition-property: color, background-color, border-color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Resetar transição para elementos específicos */
+button,
+.dashboard-tab,
+.collapsible-header {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Cursor pointer em elementos interativos */
+.collapsible-header,
+.dashboard-tab,
+button:not(:disabled),
+a,
+.nav-link {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* ========================================
+   FINALIZAÇÃO
+   ======================================== */
+
+/* Garantir que o layout funcione bem */
+#app-container {
+    min-height: 100vh;
+}
+
+#content-views {
+    min-height: calc(100vh - 5rem);
+}
+
+/* Ajustes finais de espaçamento */
+.view > *:first-child {
+    margin-top: 0;
+}
+
+.view > *:last-child {
+    margin-bottom: 0;
+	
+}
+/* ========================================
+   FIX: Gráfico de Horas Alocadas por Mês
+   ======================================== */
+
+#monthly-availability-chart {
+    display: block !important;
+}
+
+/* Melhorar legibilidade dos labels do eixo Y */
+.chartjs-render-monitor {
+    font-smoothing: antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Container do gráfico com scroll suave */
+#monthly-availability-chart-container {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+}
+
+/* Estilizar scrollbar */
+#monthly-availability-chart-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+#monthly-availability-chart-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+#monthly-availability-chart-container::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 4px;
+}
+
+#monthly-availability-chart-container::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+}
