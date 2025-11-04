@@ -1,7 +1,6 @@
 @echo off
-chcp 65001 >nul
 REM ========================================
-REM Script: Deploy em DEV (CORRIGIDO v2)
+REM Script: Deploy em DEV (CORRIGIDO)
 REM ========================================
 
 echo.
@@ -25,8 +24,8 @@ if /i not "%CONFIRMA%"=="S" (
 
 echo.
 echo [1/6] Salvando alteracoes atuais...
-git add . >nul 2>&1
-git commit -m "WIP: salvando antes do merge" >nul 2>&1
+git add .
+git commit -m "WIP: salvando antes do merge" 2>nul
 echo.
 
 echo [2/6] Mudando para branch dev...
@@ -40,14 +39,13 @@ if errorlevel 1 (
 echo [3/6] Atualizando branch dev...
 git pull origin dev
 if errorlevel 1 (
-    echo [AVISO] Falha ao atualizar dev - continuando...
+    echo [AVISO] Falha ao atualizar dev
 )
 
 echo [4/6] Fazendo merge da branch %CURRENT_BRANCH%...
 git merge %CURRENT_BRANCH% --no-ff -m "Merge %CURRENT_BRANCH% em dev"
 if errorlevel 1 (
     echo [ERRO] Conflito no merge! Resolva os conflitos manualmente.
-    echo Execute: git merge --abort (para cancelar)
     pause
     exit /b 1
 )
@@ -63,7 +61,7 @@ if errorlevel 1 (
 echo [6/6] Fazendo deploy no Firebase DEV...
 echo Executando: firebase deploy --only hosting -P dev
 echo.
-firebase deploy --only hosting -P dev
+call firebase deploy --only hosting -P dev
 if errorlevel 1 (
     echo [ERRO] Falha no deploy!
     pause
