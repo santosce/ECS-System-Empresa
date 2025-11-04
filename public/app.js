@@ -1,4 +1,4 @@
-// ===== ECS SYSTEM - VERSÃO 3.1.0 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.0 =====
 // Sistema de Gestão de Capacity
 // Última atualização: 29/10/25 - 16h30
 // Login via Popup + Todas correções aplicadas
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -2199,6 +2199,550 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     console.log('🎉 Linha "Hoje" adicionada com sucesso!');
 }
+        // ===== ⭐ INÍCIO: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
+    const kimaiFileInput = document.getElementById('kimai-file-input');
+    const selectedFileInfo = document.getElementById('selected-file-info');
+    const processKimaiBtn = document.getElementById('process-kimai-btn');
+    const removeFileBtn = document.getElementById('remove-file-btn');
+    let selectedFile = null;
+
+    // Drag and drop
+    const dropArea = kimaiFileInput?.parentElement?.parentElement;
+    if (dropArea) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('border-indigo-500', 'bg-indigo-50');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('border-indigo-500', 'bg-indigo-50');
+            });
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+    }
+
+    // Seleção de arquivo
+    kimaiFileInput?.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+
+    // Remover arquivo
+    removeFileBtn?.addEventListener('click', () => {
+        selectedFile = null;
+        kimaiFileInput.value = '';
+        selectedFileInfo?.classList.add('hidden');
+        processKimaiBtn?.classList.add('hidden');
+    });
+
+    // Processar importação
+    processKimaiBtn?.addEventListener('click', async () => {
+        if (selectedFile) {
+            await processKimaiImport(selectedFile);
+        }
+    });
+
+    function handleFileSelect(file) {
+        const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+            showNotification('Por favor, selecione um arquivo Excel válido (.xlsx ou .xls)', 'error');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            showNotification('Arquivo muito grande! Máximo: 10MB', 'error');
+            return;
+        }
+
+        selectedFile = file;
+
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        
+        if (fileName) fileName.textContent = file.name;
+        if (fileSize) fileSize.textContent = formatFileSize(file.size);
+        
+        selectedFileInfo?.classList.remove('hidden');
+        processKimaiBtn?.classList.remove('hidden');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    async function processKimaiImport(file) {
+        try {
+            showNotification('Processando arquivo...', 'info');
+            processKimaiBtn.disabled = true;
+            processKimaiBtn.innerHTML = '<span class="loading-inline mr-2"></span>Processando...';
+
+            const data = await readExcelFile(file);
+            
+            if (!data || data.length === 0) {
+                throw new Error('Arquivo vazio ou formato inválido');
+            }
+
+            console.log('📊 Dados lidos do Excel:', data.length, 'linhas');
+
+            const result = await processKimaiData(data);
+
+            displayImportResults(result);
+
+            showNotification(`✅ Importação concluída! ${result.updated} alocações atualizadas.`, 'success');
+
+        } catch (error) {
+            console.error('❌ Erro na importação:', error);
+            showNotification('Erro ao processar arquivo: ' + error.message, 'error');
+        } finally {
+            processKimaiBtn.disabled = false;
+            processKimaiBtn.innerHTML = `
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Processar Importação
+            `;
+        }
+    }
+
+    function readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
+                        header: 1,
+                        defval: '',
+                        blankrows: false
+                    });
+                    
+                    resolve(jsonData);
+                } catch (error) {
+                    reject(new Error('Erro ao ler arquivo Excel: ' + error.message));
+                }
+            };
+            
+            reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // ===== ⭐ PROCESSAMENTO v2.0 - GRANULAR POR DATA =====
+    async function processKimaiData(excelData) {
+        const result = {
+            processed: 0,
+            updated: 0,
+            skipped: 0,
+            errors: [],
+            details: []
+        };
+
+        // Identificar header
+        let headerRow = -1;
+        for (let i = 0; i < Math.min(10, excelData.length); i++) {
+            const row = excelData[i];
+            const rowStr = row.join('|').toLowerCase();
+            if (rowStr.includes('projeto') && rowStr.includes('usuário')) {
+                headerRow = i;
+                break;
+            }
+        }
+
+        if (headerRow === -1) {
+            throw new Error('Não foi possível encontrar o cabeçalho no Excel. Verifique se as colunas "Projeto" e "Usuário" existem.');
+        }
+
+        console.log('📋 Header encontrado na linha:', headerRow);
+
+        const headers = excelData[headerRow].map(h => String(h).toLowerCase().trim());
+        const projetoIdx = headers.findIndex(h => h.includes('projeto'));
+        const usuarioIdx = headers.findIndex(h => h.includes('usuário') || h.includes('usuario'));
+        const duracaoIdx = headers.findIndex(h => h.includes('duração') || h.includes('duracao') || h.includes('tempo'));
+        const dataIdx = headers.findIndex(h => h.includes('data') || h.includes('dia') || h.includes('date'));
+
+        if (projetoIdx === -1 || usuarioIdx === -1 || duracaoIdx === -1) {
+            throw new Error('Colunas obrigatórias não encontradas. Necessário: Projeto, Usuário e Duração');
+        }
+
+        if (dataIdx === -1) {
+            throw new Error('Coluna de DATA não encontrada. O Excel precisa ter uma coluna com a data de cada lançamento.');
+        }
+
+        console.log('📊 Índices das colunas:', { projetoIdx, usuarioIdx, duracaoIdx, dataIdx });
+
+        // ===== NOVO: Agrupar por profissional + projeto + DATA =====
+        const registrosPorAlocacao = new Map();
+
+        for (let i = headerRow + 1; i < excelData.length; i++) {
+            const row = excelData[i];
+            
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+            const nomeProjeto = String(row[projetoIdx] || '').trim();
+            const nomeUsuario = String(row[usuarioIdx] || '').trim();
+            const duracaoStr = String(row[duracaoIdx] || '').trim();
+            const dataStr = String(row[dataIdx] || '').trim();
+
+            if (!nomeProjeto || !nomeUsuario || !duracaoStr || !dataStr) continue;
+
+            // Converter data para formato ISO (YYYY-MM-DD)
+            const dataISO = parseDate(dataStr);
+            if (!dataISO) {
+                console.warn('⚠️ Data inválida ignorada:', dataStr);
+                continue;
+            }
+
+            // Converter duração para horas
+            const horas = parseDuration(duracaoStr);
+            if (horas === 0) continue;
+
+            const key = `${nomeUsuario}|${nomeProjeto}`;
+            
+            if (!registrosPorAlocacao.has(key)) {
+                registrosPorAlocacao.set(key, {
+                    nomeUsuario,
+                    nomeProjeto,
+                    registrosPorData: new Map()
+                });
+            }
+
+            const alocacao = registrosPorAlocacao.get(key);
+            const horasExistentes = alocacao.registrosPorData.get(dataISO) || 0;
+            alocacao.registrosPorData.set(dataISO, horasExistentes + horas);
+        }
+
+        console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
+
+        // ===== NOVO: Atualizar com comparação granular =====
+        for (const [key, dadosNovos] of registrosPorAlocacao.entries()) {
+            const { nomeUsuario, nomeProjeto, registrosPorData } = dadosNovos;
+            
+            result.processed++;
+
+            try {
+                // Encontrar profissional
+                const profissional = appState.profissionais.find(p => 
+                    p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
+                    nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
+                );
+
+                if (!profissional) {
+                    result.skipped++;
+                    result.errors.push(`Profissional não encontrado: ${nomeUsuario}`);
+                    continue;
+                }
+
+                // Encontrar projeto
+                const projeto = appState.projetos.find(p => 
+                    p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
+                    nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
+                );
+
+                if (!projeto) {
+                    result.skipped++;
+                    result.errors.push(`Projeto não encontrado: ${nomeProjeto}`);
+                    continue;
+                }
+
+                // Encontrar alocação
+                const alocacao = appState.alocacoes.find(a => 
+                    a.profissionalId === profissional.id && 
+                    a.projetoId === projeto.id
+                );
+
+                if (!alocacao) {
+                    result.skipped++;
+                    result.errors.push(`Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
+                    continue;
+                }
+
+                // ===== COMPARAÇÃO GRANULAR =====
+                const registrosAntigos = alocacao.registrosPorData || {};
+                const registrosNovos = Object.fromEntries(registrosPorData);
+                
+                const comparacao = compararRegistrosPorData(registrosAntigos, registrosNovos);
+
+                // Calcular novo total
+                const novoTotal = Math.round(
+                    Object.values(registrosNovos).reduce((sum, h) => sum + h, 0)
+                );
+
+                // Atualizar no Firestore
+                await setDoc(doc(db, getCollectionPath('alocacoes'), alocacao.id), {
+                    ...alocacao,
+                    horasRealizadas: novoTotal,
+                    registrosPorData: registrosNovos,
+                    ultimaImportacao: new Date().toISOString()
+                });
+
+                result.updated++;
+                result.details.push({
+                    profissional: profissional.nome,
+                    projeto: projeto.nome,
+                    horasAntes: alocacao.horasRealizadas || 0,
+                    horasDepois: novoTotal,
+                    diferenca: novoTotal - (alocacao.horasRealizadas || 0),
+                    comparacao: comparacao // ⭐ NOVO: detalhes granulares
+                });
+
+                console.log(`✅ Atualizado: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
+
+            } catch (error) {
+                result.errors.push(`Erro ao atualizar ${nomeUsuario} → ${nomeProjeto}: ${error.message}`);
+                console.error('❌ Erro:', error);
+            }
+        }
+
+        return result;
+    }
+
+    // ===== NOVA FUNÇÃO: Comparar registros por data =====
+    function compararRegistrosPorData(antigos, novos) {
+        const comparacao = {
+            diasNovos: [],
+            diasAlterados: [],
+            diasRemovidos: [],
+            diasInalterados: 0
+        };
+
+        const todasAsDatas = new Set([
+            ...Object.keys(antigos),
+            ...Object.keys(novos)
+        ]);
+
+        for (const data of todasAsDatas) {
+            const horasAntigas = antigos[data] || 0;
+            const horasNovas = novos[data] || 0;
+
+            if (horasAntigas === 0 && horasNovas > 0) {
+                comparacao.diasNovos.push({ data, horas: horasNovas });
+            } else if (horasAntigas > 0 && horasNovas === 0) {
+                comparacao.diasRemovidos.push({ data, horas: horasAntigas });
+            } else if (horasAntigas !== horasNovas) {
+                comparacao.diasAlterados.push({ 
+                    data, 
+                    horasAntes: horasAntigas, 
+                    horasDepois: horasNovas,
+                    diferenca: horasNovas - horasAntigas
+                });
+            } else {
+                comparacao.diasInalterados++;
+            }
+        }
+
+        return comparacao;
+    }
+
+    // ===== NOVA FUNÇÃO: Parse de data =====
+    function parseDate(dateStr) {
+        dateStr = String(dateStr).trim();
+        
+        // Formato ISO: 2025-10-07
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            return dateStr;
+        }
+        
+        // Formato BR: 07/10/2025
+        const brMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (brMatch) {
+            return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+        }
+        
+        // Formato US: 10/07/2025
+        const usMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (usMatch) {
+            return `${usMatch[3]}-${usMatch[1]}-${usMatch[2]}`;
+        }
+        
+        // Tentar Date nativo (último recurso)
+        try {
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString().split('T')[0];
+            }
+        } catch (e) {
+            // Ignorar
+        }
+        
+        return null;
+    }
+
+    function parseDuration(durationStr) {
+        durationStr = String(durationStr).trim();
+        
+        // Formato HH:MM ou HH:MM:SS
+        if (durationStr.includes(':')) {
+            const parts = durationStr.split(':').map(p => parseInt(p) || 0);
+            const hours = parts[0] || 0;
+            const minutes = parts[1] || 0;
+            const seconds = parts[2] || 0;
+            return hours + (minutes / 60) + (seconds / 3600);
+        }
+        
+        // Formato decimal (1.5, 2.0, etc)
+        const num = parseFloat(durationStr.replace(',', '.'));
+        if (!isNaN(num)) {
+            if (num < 24) return num;
+            return num / 60;
+        }
+        
+        return 0;
+    }
+
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 =====
+    function displayImportResults(result) {
+        const importResults = document.getElementById('import-results');
+        const importSummary = document.getElementById('import-summary');
+        
+        if (!importResults || !importSummary) return;
+
+        let html = `
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm text-blue-600 font-medium">Processadas</p>
+                    <p class="text-2xl font-bold text-blue-900">${result.processed}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <p class="text-sm text-green-600 font-medium">Atualizadas</p>
+                    <p class="text-2xl font-bold text-green-900">${result.updated}</p>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg">
+                    <p class="text-sm text-yellow-600 font-medium">Ignoradas</p>
+                    <p class="text-2xl font-bold text-yellow-900">${result.skipped}</p>
+                </div>
+            </div>
+        `;
+
+        if (result.details.length > 0) {
+            html += `
+                <div class="mb-6">
+                    <h4 class="font-semibold text-gray-800 mb-3">📋 Detalhes das Atualizações:</h4>
+                    <div class="space-y-4">
+                        ${result.details.map(d => {
+                            const comp = d.comparacao;
+                            const temMudancas = comp.diasNovos.length > 0 || 
+                                              comp.diasAlterados.length > 0 || 
+                                              comp.diasRemovidos.length > 0;
+                            
+                            return `
+                                <div class="bg-white border rounded-lg p-4">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div>
+                                            <h5 class="font-semibold text-gray-900">${d.profissional}</h5>
+                                            <p class="text-sm text-gray-600">${d.projeto}</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-sm text-gray-600">Total</p>
+                                            <p class="text-lg font-bold ${d.diferenca > 0 ? 'text-green-600' : d.diferenca < 0 ? 'text-red-600' : 'text-gray-600'}">
+                                                ${d.horasAntes}h → ${d.horasDepois}h
+                                                ${d.diferenca !== 0 ? `(${d.diferenca > 0 ? '+' : ''}${d.diferenca}h)` : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    ${temMudancas ? `
+                                        <div class="border-t pt-3 space-y-2">
+                                            ${comp.diasInalterados > 0 ? `
+                                                <p class="text-sm text-gray-600">
+                                                    ✓ ${comp.diasInalterados} dia(s) sem alteração
+                                                </p>
+                                            ` : ''}
+
+                                            ${comp.diasNovos.length > 0 ? `
+                                                <div class="text-sm">
+                                                    <p class="font-medium text-green-700 mb-1">🆕 Dias novos:</p>
+                                                    <ul class="list-disc list-inside ml-2 text-green-600">
+                                                        ${comp.diasNovos.slice(0, 5).map(dia => `
+                                                            <li>${formatDate(dia.data)}: +${Math.round(dia.horas)}h</li>
+                                                        `).join('')}
+                                                        ${comp.diasNovos.length > 5 ? `<li>... e mais ${comp.diasNovos.length - 5}</li>` : ''}
+                                                    </ul>
+                                                </div>
+                                            ` : ''}
+
+                                            ${comp.diasAlterados.length > 0 ? `
+                                                <div class="text-sm">
+                                                    <p class="font-medium text-yellow-700 mb-1">⚠️ Dias alterados:</p>
+                                                    <ul class="list-disc list-inside ml-2 text-yellow-600">
+                                                        ${comp.diasAlterados.slice(0, 5).map(dia => `
+                                                            <li>${formatDate(dia.data)}: ${Math.round(dia.horasAntes)}h → ${Math.round(dia.horasDepois)}h (${dia.diferenca > 0 ? '+' : ''}${Math.round(dia.diferenca)}h)</li>
+                                                        `).join('')}
+                                                        ${comp.diasAlterados.length > 5 ? `<li>... e mais ${comp.diasAlterados.length - 5}</li>` : ''}
+                                                    </ul>
+                                                </div>
+                                            ` : ''}
+
+                                            ${comp.diasRemovidos.length > 0 ? `
+                                                <div class="text-sm">
+                                                    <p class="font-medium text-red-700 mb-1">🗑️ Dias removidos:</p>
+                                                    <ul class="list-disc list-inside ml-2 text-red-600">
+                                                        ${comp.diasRemovidos.slice(0, 5).map(dia => `
+                                                            <li>${formatDate(dia.data)}: -${Math.round(dia.horas)}h</li>
+                                                        `).join('')}
+                                                        ${comp.diasRemovidos.length > 5 ? `<li>... e mais ${comp.diasRemovidos.length - 5}</li>` : ''}
+                                                    </ul>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    ` : `
+                                        <p class="text-sm text-gray-500 border-t pt-3">
+                                            ℹ️ Sem mudanças detectadas
+                                        </p>
+                                    `}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (result.errors.length > 0) {
+            html += `
+                <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                    <h4 class="font-semibold text-red-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
+                    <ul class="list-disc list-inside text-sm text-red-700 space-y-1">
+                        ${result.errors.slice(0, 10).map(e => `<li>${e}</li>`).join('')}
+                        ${result.errors.length > 10 ? `<li class="font-semibold">... e mais ${result.errors.length - 10} avisos</li>` : ''}
+                    </ul>
+                </div>
+            `;
+        }
+
+        importSummary.innerHTML = html;
+        importResults.classList.remove('hidden');
+
+        setTimeout(() => {
+            importResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 300);
+    }
+    // ===== ⭐ FIM: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
+
 
     // Inicialização da view inicial
     switchView('dashboard');
