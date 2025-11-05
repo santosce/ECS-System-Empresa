@@ -1,7 +1,7 @@
 // ===== ECS SYSTEM - VERSÃO 3.2.0 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 29/10/25 - 16h30
-// Login via Popup + Todas correções aplicadas
+// Última atualização: 05/11/25 - 13:40
+// Com Importação de Hr do Kimai
 
 // Importações do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -159,7 +159,28 @@ function initializeAppLogic() {
             showNotification('Erro ao fazer logout', 'error');
         }
     });
-
+	// ===== NOVO: Listener global para expandir/recolher listas de importação =====
+    document.body.addEventListener('click', function(e) {
+        // Verifica se o clique foi em um link "expand-toggle"
+        if (e.target.classList.contains('expand-toggle')) {
+            e.preventDefault(); // Impede o link de navegar
+            
+            const parentLi = e.target.parentElement;
+            const ul = parentLi.parentElement;
+            const items = ul.querySelectorAll('.expandable-item');
+            const isExpanding = !parentLi.classList.contains('is-expanded');
+            
+            items.forEach(item => item.classList.toggle('hidden'));
+            parentLi.classList.toggle('is-expanded');
+            
+            if (isExpanding) {
+                e.target.textContent = 'Recolher';
+            } else {
+                const count = items.length;
+                e.target.textContent = `... e mais ${count}`;
+            }
+        }
+    });
     // Listener de mudança de autenticação
     onAuthStateChanged(auth, async (user) => {
         console.log('🔄 Estado de autenticação mudou:', user ? 'Logado' : 'Não logado');
@@ -2335,11 +2356,14 @@ function addTodayLineToTimeline(container, alocacoes) {
                     
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
-                        header: 1,
-                        defval: '',
-                        blankrows: false
+                    // ✅ CORREÇÃO: Usar objetos em vez de arrays
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, {
+                        raw: false,  // Converter tudo para string
+                        defval: ''   // Valores vazios como string vazia
                     });
+                    
+                    console.log('📊 Registros lidos:', jsonData.length);
+                    console.log('📋 Primeiras colunas:', Object.keys(jsonData[0] || {}));
                     
                     resolve(jsonData);
                 } catch (error) {
@@ -2362,64 +2386,41 @@ function addTodayLineToTimeline(container, alocacoes) {
             details: []
         };
 
-        // Identificar header
-        let headerRow = -1;
-        for (let i = 0; i < Math.min(10, excelData.length); i++) {
-            const row = excelData[i];
-            const rowStr = row.join('|').toLowerCase();
-            if (rowStr.includes('projeto') && rowStr.includes('usuário')) {
-                headerRow = i;
-                break;
-            }
-        }
+        console.log('🔍 Processando', excelData.length, 'registros...');
 
-        if (headerRow === -1) {
-            throw new Error('Não foi possível encontrar o cabeçalho no Excel. Verifique se as colunas "Projeto" e "Usuário" existem.');
-        }
-
-        console.log('📋 Header encontrado na linha:', headerRow);
-
-        const headers = excelData[headerRow].map(h => String(h).toLowerCase().trim());
-        const projetoIdx = headers.findIndex(h => h.includes('projeto'));
-        const usuarioIdx = headers.findIndex(h => h.includes('usuário') || h.includes('usuario'));
-        const duracaoIdx = headers.findIndex(h => h.includes('duração') || h.includes('duracao') || h.includes('tempo'));
-        const dataIdx = headers.findIndex(h => h.includes('data') || h.includes('dia') || h.includes('date'));
-
-        if (projetoIdx === -1 || usuarioIdx === -1 || duracaoIdx === -1) {
-            throw new Error('Colunas obrigatórias não encontradas. Necessário: Projeto, Usuário e Duração');
-        }
-
-        if (dataIdx === -1) {
-            throw new Error('Coluna de DATA não encontrada. O Excel precisa ter uma coluna com a data de cada lançamento.');
-        }
-
-        console.log('📊 Índices das colunas:', { projetoIdx, usuarioIdx, duracaoIdx, dataIdx });
-
-        // ===== NOVO: Agrupar por profissional + projeto + DATA =====
+        // ✅ NOVO: Processar diretamente os objetos JSON
         const registrosPorAlocacao = new Map();
 
-        for (let i = headerRow + 1; i < excelData.length; i++) {
-            const row = excelData[i];
-            
-            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+        for (const row of excelData) {
+            const nomeProjeto = String(row['Projeto'] || '').trim();
+            const nomeUsuario = String(row['Usuário'] || row['Nome'] || '').trim();
+            const duracaoStr = String(row['Duração'] || '').trim();
+            const dataStr = String(row['Data'] || '').trim();
 
-            const nomeProjeto = String(row[projetoIdx] || '').trim();
-            const nomeUsuario = String(row[usuarioIdx] || '').trim();
-            const duracaoStr = String(row[duracaoIdx] || '').trim();
-            const dataStr = String(row[dataIdx] || '').trim();
-
-            if (!nomeProjeto || !nomeUsuario || !duracaoStr || !dataStr) continue;
-
-            // Converter data para formato ISO (YYYY-MM-DD)
-            const dataISO = parseDate(dataStr);
-            if (!dataISO) {
-                console.warn('⚠️ Data inválida ignorada:', dataStr);
+            // Pular linhas vazias
+            if (!nomeProjeto || !nomeUsuario || !duracaoStr || !dataStr) {
                 continue;
             }
 
-            // Converter duração para horas
+            // Converter data para formato ISO
+            const dataISO = parseDate(dataStr);
+            if (!dataISO) {
+                const errorMsg = `⚠️ Formato de data não reconhecido: "${dataStr}"`;
+                if (!result.errors.includes(errorMsg)) {
+                    result.errors.push(errorMsg);
+                }
+                continue;
+            }
+
+            // ✅ CORREÇÃO: Converter duração para horas
             const horas = parseDuration(duracaoStr);
-            if (horas === 0) continue;
+            
+            console.log(`📊 ${nomeUsuario} | ${nomeProjeto} | ${dataStr} | "${duracaoStr}" → ${horas}h`);
+            
+            if (horas === 0) {
+                console.warn(`⚠️ Duração zero: "${duracaoStr}"`);
+                continue;
+            }
 
             const key = `${nomeUsuario}|${nomeProjeto}`;
             
@@ -2427,20 +2428,27 @@ function addTodayLineToTimeline(container, alocacoes) {
                 registrosPorAlocacao.set(key, {
                     nomeUsuario,
                     nomeProjeto,
-                    registrosPorData: new Map()
+                    registrosPorData: new Map(),
+                    totalHoras: 0
                 });
             }
 
             const alocacao = registrosPorAlocacao.get(key);
             const horasExistentes = alocacao.registrosPorData.get(dataISO) || 0;
             alocacao.registrosPorData.set(dataISO, horasExistentes + horas);
+            alocacao.totalHoras += horas;
         }
 
         console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
 
-        // ===== NOVO: Atualizar com comparação granular =====
+        // ✅ LOG DE DEBUG: Mostrar totais
+        for (const [key, dados] of registrosPorAlocacao.entries()) {
+            console.log(`👤 ${key}: ${dados.totalHoras.toFixed(2)}h (${dados.registrosPorData.size} dias)`);
+        }
+
+        // Atualizar alocações no Firestore
         for (const [key, dadosNovos] of registrosPorAlocacao.entries()) {
-            const { nomeUsuario, nomeProjeto, registrosPorData } = dadosNovos;
+            const { nomeUsuario, nomeProjeto, registrosPorData, totalHoras } = dadosNovos;
             
             result.processed++;
 
@@ -2454,6 +2462,7 @@ function addTodayLineToTimeline(container, alocacoes) {
                 if (!profissional) {
                     result.skipped++;
                     result.errors.push(`Profissional não encontrado: ${nomeUsuario}`);
+                    console.warn(`❌ Profissional não encontrado: ${nomeUsuario}`);
                     continue;
                 }
 
@@ -2466,6 +2475,7 @@ function addTodayLineToTimeline(container, alocacoes) {
                 if (!projeto) {
                     result.skipped++;
                     result.errors.push(`Projeto não encontrado: ${nomeProjeto}`);
+                    console.warn(`❌ Projeto não encontrado: ${nomeProjeto}`);
                     continue;
                 }
 
@@ -2478,19 +2488,17 @@ function addTodayLineToTimeline(container, alocacoes) {
                 if (!alocacao) {
                     result.skipped++;
                     result.errors.push(`Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
+                    console.warn(`❌ Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
                     continue;
                 }
 
-                // ===== COMPARAÇÃO GRANULAR =====
+                // ✅ CORREÇÃO: Usar totalHoras calculado
                 const registrosAntigos = alocacao.registrosPorData || {};
                 const registrosNovos = Object.fromEntries(registrosPorData);
                 
-                const comparacao = compararRegistrosPorData(registrosAntigos, registrosNovos);
+                const novoTotal = Math.round(totalHoras); // Usar totalHoras, não recalcular
 
-                // Calcular novo total
-                const novoTotal = Math.round(
-                    Object.values(registrosNovos).reduce((sum, h) => sum + h, 0)
-                );
+                console.log(`💾 Salvando: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
 
                 // Atualizar no Firestore
                 await setDoc(doc(db, getCollectionPath('alocacoes'), alocacao.id), {
@@ -2506,8 +2514,7 @@ function addTodayLineToTimeline(container, alocacoes) {
                     projeto: projeto.nome,
                     horasAntes: alocacao.horasRealizadas || 0,
                     horasDepois: novoTotal,
-                    diferenca: novoTotal - (alocacao.horasRealizadas || 0),
-                    comparacao: comparacao // ⭐ NOVO: detalhes granulares
+                    diferenca: novoTotal - (alocacao.horasRealizadas || 0)
                 });
 
                 console.log(`✅ Atualizado: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
@@ -2521,7 +2528,7 @@ function addTodayLineToTimeline(container, alocacoes) {
         return result;
     }
 
-    // ===== NOVA FUNÇÃO: Comparar registros por data =====
+    // ===== NOVA FUNÇÃO: Comparar registros por data (CORRIGIDA) =====
     function compararRegistrosPorData(antigos, novos) {
         const comparacao = {
             diasNovos: [],
@@ -2536,8 +2543,9 @@ function addTodayLineToTimeline(container, alocacoes) {
         ]);
 
         for (const data of todasAsDatas) {
-            const horasAntigas = antigos[data] || 0;
-            const horasNovas = novos[data] || 0;
+            // ✅ CORREÇÃO AQUI: Arredonda para 2 casas decimais
+            const horasAntigas = Math.round((antigos[data] || 0) * 100) / 100;
+            const horasNovas = Math.round((novos[data] || 0) * 100) / 100;
 
             if (horasAntigas === 0 && horasNovas > 0) {
                 comparacao.diasNovos.push({ data, horas: horasNovas });
@@ -2558,28 +2566,51 @@ function addTodayLineToTimeline(container, alocacoes) {
         return comparacao;
     }
 
-    // ===== NOVA FUNÇÃO: Parse de data =====
+    // ===== NOVA FUNÇÃO: Parse de data (CORRIGIDA) =====
+    // ===== NOVA FUNÇÃO: Parse de data (v3.0 - Mais Robusta) =====
     function parseDate(dateStr) {
         dateStr = String(dateStr).trim();
-        
-        // Formato ISO: 2025-10-07
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            return dateStr;
+
+        // 1. Tentar converter número serial do Excel (ex: 45733)
+        if (/^\d{4,5}$/.test(dateStr)) {
+            try {
+                const excelSerialDate = parseInt(dateStr, 10);
+                // 25569 é o offset entre 01/01/1900 (Excel) e 01/01/1970 (Unix)
+                const jsTimestamp = (excelSerialDate - 25569) * 86400 * 1000;
+                const date = new Date(jsTimestamp);
+                const utcDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
+                if (!isNaN(utcDate.getTime())) {
+                    return utcDate.toISOString().split('T')[0];
+                }
+            } catch (e) { /* falha, tenta outros formatos */ }
+        }
+
+        // 2. Tentar formatos comuns (ISO, BR, US, Alemão) com hífens, barras ou pontos
+        // Regex para YYYY-MM-DD
+        let match = dateStr.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/);
+        if (match) {
+            return `${match[1]}-${match[2]}-${match[3]}`;
         }
         
-        // Formato BR: 07/10/2025
-        const brMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-        if (brMatch) {
-            return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+        // Regex para DD/MM/YYYY (BR) ou DD.MM.YYYY (Alemão)
+        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+        if (match) {
+            // Assumindo formato DD/MM/YYYY
+            return `${match[3]}-${match[2]}-${match[1]}`;
+        }
+
+        // Regex para MM/DD/YYYY (US)
+        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+        if (match) {
+            // Se o primeiro grupo (MM) for > 12, é provável que seja DD/MM/YYYY
+            if (parseInt(match[1], 10) > 12) {
+                return `${match[3]}-${match[2]}-${match[1]}`; // Formato BR
+            }
+            // Assumindo formato MM/DD/YYYY
+            return `${match[3]}-${match[1]}-${match[2]}`;
         }
         
-        // Formato US: 10/07/2025
-        const usMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-        if (usMatch) {
-            return `${usMatch[3]}-${usMatch[1]}-${usMatch[2]}`;
-        }
-        
-        // Tentar Date nativo (último recurso)
+        // 3. Último recurso: Deixar o JavaScript tentar adivinhar
         try {
             const date = new Date(dateStr);
             if (!isNaN(date.getTime())) {
@@ -2589,11 +2620,33 @@ function addTodayLineToTimeline(container, alocacoes) {
             // Ignorar
         }
         
+        // Se tudo falhar, retorna null para ser tratado como erro
+        console.warn('Formato de data não reconhecido:', dateStr);
         return null;
     }
 
     function parseDuration(durationStr) {
         durationStr = String(durationStr).trim();
+        
+        // ✅ NOVO: Verificar formato "X days HH:MM:SS"
+        if (durationStr.includes('days') || durationStr.includes('day')) {
+            const partes = durationStr.split(/days?/i); // case-insensitive
+            const dias = parseInt(partes[0].trim()) || 0;
+            const tempoStr = partes[1].trim();
+            
+            // Processar a parte de tempo HH:MM:SS
+            const timeParts = tempoStr.split(':').map(p => parseInt(p) || 0);
+            const hours = (timeParts[0] || 0);
+            const minutes = (timeParts[1] || 0);
+            const seconds = (timeParts[2] || 0);
+            
+            // ✅ CORREÇÃO CRÍTICA: Converter dias em horas + tempo
+            const totalHoras = (dias * 24) + hours + (minutes / 60) + (seconds / 3600);
+            
+            console.log(`🔍 Convertendo: "${durationStr}" → ${totalHoras.toFixed(2)}h`);
+            
+            return Math.round(totalHoras * 100) / 100; // 2 casas decimais
+        }
         
         // Formato HH:MM ou HH:MM:SS
         if (durationStr.includes(':')) {
@@ -2615,6 +2668,9 @@ function addTodayLineToTimeline(container, alocacoes) {
     }
 
     // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDA) =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (Com Expandir/Recolher) =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDO: Mostra decimais) =====
     function displayImportResults(result) {
         const importResults = document.getElementById('import-results');
         const importSummary = document.getElementById('import-summary');
@@ -2642,78 +2698,23 @@ function addTodayLineToTimeline(container, alocacoes) {
             html += `
                 <div class="mb-6">
                     <h4 class="font-semibold text-gray-800 mb-3">📋 Detalhes das Atualizações:</h4>
-                    <div class="space-y-4">
+                    <div class="space-y-3">
                         ${result.details.map(d => {
-                            const comp = d.comparacao;
-                            const temMudancas = comp.diasNovos.length > 0 || 
-                                              comp.diasAlterados.length > 0 || 
-                                              comp.diasRemovidos.length > 0;
+                            const diferencaHoras = d.diferenca || 0;
+                            const sinal = diferencaHoras > 0 ? '+' : '';
+                            const corDiferenca = diferencaHoras > 0 ? 'text-green-600' : 
+                                                 diferencaHoras < 0 ? 'text-red-600' : 'text-gray-600';
                             
                             return `
-                                <div class="bg-white border rounded-lg p-4">
-                                    <div class="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h5 class="font-semibold text-gray-900">${d.profissional}</h5>
-                                            <p class="text-sm text-gray-600">${d.projeto}</p>
-                                        </div>
-                                        <div class="text-right">
-                                            <p class="text-sm text-gray-600">Total</p>
-                                            <p class="text-lg font-bold ${d.diferenca > 0 ? 'text-green-600' : d.diferenca < 0 ? 'text-red-600' : 'text-gray-600'}">
-                                                ${d.horasAntes}h → ${d.horasDepois}h
-                                                ${d.diferenca !== 0 ? `(${d.diferenca > 0 ? '+' : ''}${d.diferenca}h)` : ''}
-                                            </p>
-                                        </div>
+                                <div class="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                    <p class="font-semibold text-gray-900 mb-2">${d.profissional} → ${d.projeto}</p>
+                                    <div class="flex gap-4 text-sm">
+                                        <span class="text-gray-600">Antes: <strong>${d.horasAntes}h</strong></span>
+                                        <span class="${corDiferenca} font-bold">
+                                            ${sinal}${diferencaHoras}h
+                                        </span>
+                                        <span class="text-indigo-600">Depois: <strong>${d.horasDepois}h</strong></span>
                                     </div>
-
-                                    ${temMudancas ? `
-                                        <div class="border-t pt-3 space-y-2">
-                                            ${comp.diasInalterados > 0 ? `
-                                                <p class="text-sm text-gray-600">
-                                                    ✓ ${comp.diasInalterados} dia(s) sem alteração
-                                                </p>
-                                            ` : ''}
-
-                                            ${comp.diasNovos.length > 0 ? `
-                                                <div class="text-sm">
-                                                    <p class="font-medium text-green-700 mb-1">🆕 Dias novos:</p>
-                                                    <ul class="list-disc list-inside ml-2 text-green-600">
-                                                        ${comp.diasNovos.slice(0, 5).map(dia => `
-                                                            <li>${formatDate(dia.data)}: +${Math.round(dia.horas)}h</li>
-                                                        `).join('')}
-                                                        ${comp.diasNovos.length > 5 ? `<li>... e mais ${comp.diasNovos.length - 5}</li>` : ''}
-                                                    </ul>
-                                                </div>
-                                            ` : ''}
-
-                                            ${comp.diasAlterados.length > 0 ? `
-                                                <div class="text-sm">
-                                                    <p class="font-medium text-yellow-700 mb-1">⚠️ Dias alterados:</p>
-                                                    <ul class="list-disc list-inside ml-2 text-yellow-600">
-                                                        ${comp.diasAlterados.slice(0, 5).map(dia => `
-                                                            <li>${formatDate(dia.data)}: ${Math.round(dia.horasAntes)}h → ${Math.round(dia.horasDepois)}h (${dia.diferenca > 0 ? '+' : ''}${Math.round(dia.diferenca)}h)</li>
-                                                        `).join('')}
-                                                        ${comp.diasAlterados.length > 5 ? `<li>... e mais ${comp.diasAlterados.length - 5}</li>` : ''}
-                                                    </ul>
-                                                </div>
-                                            ` : ''}
-
-                                            ${comp.diasRemovidos.length > 0 ? `
-                                                <div class="text-sm">
-                                                    <p class="font-medium text-red-700 mb-1">🗑️ Dias removidos:</p>
-                                                    <ul class="list-disc list-inside ml-2 text-red-600">
-                                                        ${comp.diasRemovidos.slice(0, 5).map(dia => `
-                                                            <li>${formatDate(dia.data)}: -${Math.round(dia.horas)}h</li>
-                                                        `).join('')}
-                                                        ${comp.diasRemovidos.length > 5 ? `<li>... e mais ${comp.diasRemovidos.length - 5}</li>` : ''}
-                                                    </ul>
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                    ` : `
-                                        <p class="text-sm text-gray-500 border-t pt-3">
-                                            ℹ️ Sem mudanças detectadas
-                                        </p>
-                                    `}
                                 </div>
                             `;
                         }).join('')}
@@ -2724,11 +2725,11 @@ function addTodayLineToTimeline(container, alocacoes) {
 
         if (result.errors.length > 0) {
             html += `
-                <div class="bg-red-50 border-l-4 border-red-500 p-4">
-                    <h4 class="font-semibold text-red-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
-                    <ul class="list-disc list-inside text-sm text-red-700 space-y-1">
-                        ${result.errors.slice(0, 10).map(e => `<li>${e}</li>`).join('')}
-                        ${result.errors.length > 10 ? `<li class="font-semibold">... e mais ${result.errors.length - 10} avisos</li>` : ''}
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg mt-6">
+                    <h4 class="font-semibold text-yellow-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
+                    <ul class="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                        ${result.errors.slice(0, 5).map(err => `<li>${err}</li>`).join('')}
+                        ${result.errors.length > 5 ? `<li class="font-semibold">... e mais ${result.errors.length - 5} avisos</li>` : ''}
                     </ul>
                 </div>
             `;
@@ -2736,10 +2737,11 @@ function addTodayLineToTimeline(container, alocacoes) {
 
         importSummary.innerHTML = html;
         importResults.classList.remove('hidden');
-
+        
+        // Scroll suave até os resultados
         setTimeout(() => {
-            importResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 300);
+            importResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     }
     // ===== ⭐ FIM: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
 
