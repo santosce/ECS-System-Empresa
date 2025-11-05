@@ -1,37 +1,47 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
 REM Menu Principal - Git + Firebase Helper
+REM Versao: 2.0 - Reorganizado por Fluxo
 REM ========================================
 
 :MENU
 cls
 echo.
 echo ========================================
-echo   GIT + FIREBASE HELPER
+echo   GIT + FIREBASE HELPER v2.0
+echo   ECS-System-Empresa
 echo ========================================
 echo.
-echo [1] Iniciar Nova Feature
-echo [2] Salvar Alteracoes (Commit)
-echo [3] Ver Status do Projeto
-echo [4] Deploy em DEV
-echo [5] Deploy em PRODUCAO
-echo [6] Emergencia (Desfazer/Recuperar)
-echo [7] Ver Guia de Commits
-echo [8] Atualizar Branch Atual
-echo [9] Sair
+echo FLUXO DE TRABALHO:
+echo.
+echo [1] Iniciar Nova Feature      (Comecar trabalho)
+echo [2] Salvar Alteracoes          (Durante o trabalho)
+echo [3] Ver Status                 (Verificar mudancas)
+echo [4] Atualizar Branch           (Sincronizar)
+echo [5] Deploy em DEV              (Testar)
+echo [6] Deploy em PRODUCAO         (Publicar)
+echo.
+echo UTILIDADES:
+echo.
+echo [7] Emergencia                 (Desfazer/Recuperar)
+echo [8] Ver Guia de Commits        (Como escrever)
+echo [9] Configuracao Inicial       (Setup)
+echo [0] Sair
 echo.
 echo ========================================
-set /p OPCAO="Escolha uma opcao (1-9): "
+set /p OPCAO="Escolha uma opcao (0-9): "
 
 if "%OPCAO%"=="1" goto NOVA_FEATURE
 if "%OPCAO%"=="2" goto COMMIT
 if "%OPCAO%"=="3" goto STATUS
-if "%OPCAO%"=="4" goto DEPLOY_DEV
-if "%OPCAO%"=="5" goto DEPLOY_PROD
-if "%OPCAO%"=="6" goto EMERGENCIA
-if "%OPCAO%"=="7" goto GUIA_COMMIT
-if "%OPCAO%"=="8" goto ATUALIZAR
-if "%OPCAO%"=="9" goto SAIR
+if "%OPCAO%"=="4" goto ATUALIZAR
+if "%OPCAO%"=="5" goto DEPLOY_DEV
+if "%OPCAO%"=="6" goto DEPLOY_PROD
+if "%OPCAO%"=="7" goto EMERGENCIA
+if "%OPCAO%"=="8" goto GUIA_COMMIT
+if "%OPCAO%"=="9" goto SETUP
+if "%OPCAO%"=="0" goto SAIR
 
 echo.
 echo Opcao invalida!
@@ -40,72 +50,71 @@ goto MENU
 
 :NOVA_FEATURE
 cls
-call nova-feature.bat
+call CmdGit\nova-feature.bat
 goto MENU
 
 :COMMIT
 cls
-call commit.bat
+call CmdGit\commit.bat
 goto MENU
 
 :STATUS
 cls
-call status.bat
-goto MENU
-
-:DEPLOY_DEV
-cls
-call deploy-dev.bat
-goto MENU
-
-:DEPLOY_PROD
-cls
-call deploy-producao.bat
-goto MENU
-
-:EMERGENCIA
-cls
-call emergencia.bat
-goto MENU
-
-:GUIA_COMMIT
-cls
-type COMMIT_GUIDE.md
-echo.
-pause
+call CmdGit\status.bat
 goto MENU
 
 :ATUALIZAR
 cls
-echo.
-echo ========================================
-echo   ATUALIZANDO BRANCH ATUAL
-echo ========================================
-echo.
+call CmdGit\atualizar.bat
+goto MENU
 
-for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD') do set BRANCH=%%i
-echo Branch atual: %BRANCH%
-echo.
+:DEPLOY_DEV
+cls
+call CmdGit\deploy-dev.bat
+goto MENU
 
-echo Puxando atualizacoes do GitHub...
-git pull origin %BRANCH%
+:DEPLOY_PROD
+cls
+call CmdGit\deploy-producao.bat
+goto MENU
 
-if errorlevel 1 (
-    echo.
-    echo [ERRO] Falha ao atualizar!
+:EMERGENCIA
+cls
+call CmdGit\emergencia.bat
+goto MENU
+
+:GUIA_COMMIT
+cls
+if exist Docs\COMMIT_GUIDE.md (
+    type Docs\COMMIT_GUIDE.md
+) else if exist COMMIT_GUIDE.md (
+    type COMMIT_GUIDE.md
 ) else (
+    echo Guia de commits nao encontrado.
     echo.
-    echo [SUCESSO] Branch atualizada!
+    echo Dicas rapidas:
+    echo - feat: Nova funcionalidade
+    echo - fix: Correcao de bug
+    echo - docs: Documentacao
+    echo - style: Formatacao
+    echo - refactor: Refatoracao
 )
-
 echo.
 pause
+goto MENU
+
+:SETUP
+cls
+call CmdGit\setup.bat
 goto MENU
 
 :SAIR
 cls
 echo.
-echo Ate logo!
+echo ========================================
+echo   Ate logo!
+echo   Bom trabalho no ECS-System-Empresa!
+echo ========================================
 echo.
 timeout /t 2 >nul
 exit /b 0
