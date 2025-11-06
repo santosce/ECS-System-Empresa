@@ -389,9 +389,23 @@ function initializeAppLogic() {
         document.getElementById('add-alocacao-btn')?.addEventListener('click', () => openAlocacaoModal());
 
         if (viewId === 'timeline' && isGoogleChartsLoaded) {
-            setTimeout(() => {
+             setTimeout(() => {
                 drawTimelineChart();
-            }, 100);
+             }, 100);
+        }
+
+        // ✅ NOVO: Redesenhar gráficos ao voltar para Dashboard
+        if (viewId === 'dashboard') {
+            setTimeout(() => {
+                if (profileChart) {
+                    profileChart.resize();
+                    profileChart.update('none');
+                }
+                if (monthlyAvailabilityChart) {
+                    monthlyAvailabilityChart.resize();
+                    monthlyAvailabilityChart.update('none');
+                }
+            }, 200);
         }
         
         updateUIBasedOnRole(currentUserRole);
@@ -407,40 +421,73 @@ function initializeAppLogic() {
     const dashboardTabContents = document.querySelectorAll('.dashboard-tab-content');
 
     dashboardTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const tabName = tab.dataset.tab;
-            
-            dashboardTabs.forEach(t => {
-                t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
-                t.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
-            tab.classList.remove('border-transparent', 'text-gray-500');
-            
-            dashboardTabContents.forEach(content => {
-                content.classList.add('hidden');
-            });
-            
-            document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
+    tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        
+        dashboardTabs.forEach(t => {
+            t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
+            t.classList.add('border-transparent', 'text-gray-500');
         });
+        
+        tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
+        tab.classList.remove('border-transparent', 'text-gray-500');
+        
+        dashboardTabContents.forEach(content => {
+            content.classList.add('hidden');
+        });
+        
+        document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
+        
+        // ✅ NOVO: Redesenhar gráficos quando voltar para "Visão Geral"
+        if (tabName === 'visao-geral') {
+            setTimeout(() => {
+                if (profileChart) {
+                    profileChart.resize();
+                    profileChart.update('none');
+                }
+                if (monthlyAvailabilityChart) {
+                    monthlyAvailabilityChart.resize();
+                    monthlyAvailabilityChart.update('none');
+                }
+            }, 100);
+        }
     });
+});
 
     // Collapsible headers
     document.querySelectorAll('.collapsible-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const content = header.nextElementSibling;
-            const icon = header.querySelector('svg');
+    header.addEventListener('click', () => {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('svg');
+        
+        const wasHidden = content.classList.contains('hidden');
+        
+        if (wasHidden) {
+            content.classList.remove('hidden');
+            icon?.classList.add('rotate-180');
             
-            if (content.classList.contains('hidden')) {
-                content.classList.remove('hidden');
-                icon?.classList.add('rotate-180');
-            } else {
-                content.classList.add('hidden');
-                icon?.classList.remove('rotate-180');
-            }
-        });
+            // ✅ NOVO: Redesenhar gráficos após abrir collapsible
+            setTimeout(() => {
+                // Verificar se o collapsible contém gráficos
+                const chartCanvas = content.querySelector('canvas');
+                if (chartCanvas) {
+                    const chartId = chartCanvas.id;
+                    
+                    if (chartId === 'profile-distribution-chart' && profileChart) {
+                        profileChart.resize();
+                        profileChart.update('none');
+                    } else if (chartId === 'monthly-availability-chart' && monthlyAvailabilityChart) {
+                        monthlyAvailabilityChart.resize();
+                        monthlyAvailabilityChart.update('none');
+                    }
+                }
+            }, 350); // Aguardar animação CSS terminar
+        } else {
+            content.classList.add('hidden');
+            icon?.classList.remove('rotate-180');
+        }
     });
+});
 
     // ===== FERIADOS NACIONAIS DO BRASIL =====
     function getFeriadosNacionais(ano) {
@@ -1619,6 +1666,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const canvas = document.getElementById('profile-distribution-chart');
         if (!canvas) return;
 
+        // ✅ Verificar se o canvas está visível
+        const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
+        if (!isVisible) {
+            console.log('⏳ Canvas do perfil não visível, tentando novamente...');
+            setTimeout(updateProfileChart, 200);
+            return;
+        }
+
         const profiles = {};
         appState.profissionais.filter(p => p.ativo !== 'Não').forEach(p => {
             profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
@@ -1628,7 +1683,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const data = Object.values(profiles);
         const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-        if (profileChart) profileChart.destroy();
+        if (profileChart) {
+            profileChart.destroy();
+            profileChart = null;
+        }
+
+        // ✅ Forçar dimensões do container antes de criar o gráfico
+        const container = canvas.parentElement;
+        container.style.height = '240px';
+        container.style.width = '100%';
 
         profileChart = new Chart(canvas, {
             type: 'doughnut',
@@ -1648,8 +1711,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     padding: {
                         top: 30,
                         bottom: 30,
-						left: 10,
-						right: 10
+                        left: 10,
+                        right: 10
                     }
                 },
                 plugins: {
@@ -1688,13 +1751,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                         color: '#fff',
                         font: { weight: 'bold', size: 14 },
                         formatter: (value) => value,
-						anchor: 'center',
-						align: 'center' 
+                        anchor: 'center',
+                        align: 'center' 
                     }
                 }
             },
             plugins: [ChartDataLabels]
         });
+
+        console.log('✅ Gráfico de perfil renderizado');
     }
 
     function updateMonthlyAvailabilityChart() {
