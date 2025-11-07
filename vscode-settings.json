@@ -1,0 +1,45 @@
+{
+  // ========================================
+  // Configurações Recomendadas - VS Code
+  // Salve este arquivo como .vscode/settings.json
+  // ========================================
+
+  // Git
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "git.suggestSmartCommit": true,
+  "git.postCommitCommand": "push",
+  
+  // Terminal
+  "terminal.integrated.defaultProfile.windows": "Command Prompt",
+  "terminal.integrated.fontSize": 14,
+  
+  // Editor
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "editor.wordWrap": "on",
+  "editor.minimap.enabled": true,
+  "editor.fontSize": 14,
+  "editor.lineHeight": 22,
+  
+  // Arquivos
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+  "files.exclude": {
+    "**/.git": false,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.firebase": true
+  },
+  
+  // Extensões recomendadas
+  "recommendations": [
+    "eamodio.gitlens",
+    "github.vscode-pull-request-github",
+    "mhutchie.git-graph",
+    "donjayamanne.githistory",
+    "aaron-bond.better-comments"
+  ]
+}

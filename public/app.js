@@ -1,7 +1,7 @@
-// ===== ECS SYSTEM - VERSÃO 3.1.0 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.0 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 29/10/25 - 16h30
-// Login via Popup + Todas correções aplicadas
+// Última atualização: 05/11/25 - 13:40
+// Com Importação de Hr do Kimai
 
 // Importações do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -159,7 +159,28 @@ function initializeAppLogic() {
             showNotification('Erro ao fazer logout', 'error');
         }
     });
-
+	// ===== NOVO: Listener global para expandir/recolher listas de importação =====
+    document.body.addEventListener('click', function(e) {
+        // Verifica se o clique foi em um link "expand-toggle"
+        if (e.target.classList.contains('expand-toggle')) {
+            e.preventDefault(); // Impede o link de navegar
+            
+            const parentLi = e.target.parentElement;
+            const ul = parentLi.parentElement;
+            const items = ul.querySelectorAll('.expandable-item');
+            const isExpanding = !parentLi.classList.contains('is-expanded');
+            
+            items.forEach(item => item.classList.toggle('hidden'));
+            parentLi.classList.toggle('is-expanded');
+            
+            if (isExpanding) {
+                e.target.textContent = 'Recolher';
+            } else {
+                const count = items.length;
+                e.target.textContent = `... e mais ${count}`;
+            }
+        }
+    });
     // Listener de mudança de autenticação
     onAuthStateChanged(auth, async (user) => {
         console.log('🔄 Estado de autenticação mudou:', user ? 'Logado' : 'Não logado');
@@ -368,9 +389,23 @@ function initializeAppLogic() {
         document.getElementById('add-alocacao-btn')?.addEventListener('click', () => openAlocacaoModal());
 
         if (viewId === 'timeline' && isGoogleChartsLoaded) {
-            setTimeout(() => {
+             setTimeout(() => {
                 drawTimelineChart();
-            }, 100);
+             }, 100);
+        }
+
+        // ✅ NOVO: Redesenhar gráficos ao voltar para Dashboard
+        if (viewId === 'dashboard') {
+            setTimeout(() => {
+                if (profileChart) {
+                    profileChart.resize();
+                    profileChart.update('none');
+                }
+                if (monthlyAvailabilityChart) {
+                    monthlyAvailabilityChart.resize();
+                    monthlyAvailabilityChart.update('none');
+                }
+            }, 200);
         }
         
         updateUIBasedOnRole(currentUserRole);
@@ -386,40 +421,73 @@ function initializeAppLogic() {
     const dashboardTabContents = document.querySelectorAll('.dashboard-tab-content');
 
     dashboardTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const tabName = tab.dataset.tab;
-            
-            dashboardTabs.forEach(t => {
-                t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
-                t.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
-            tab.classList.remove('border-transparent', 'text-gray-500');
-            
-            dashboardTabContents.forEach(content => {
-                content.classList.add('hidden');
-            });
-            
-            document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
+    tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        
+        dashboardTabs.forEach(t => {
+            t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
+            t.classList.add('border-transparent', 'text-gray-500');
         });
+        
+        tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
+        tab.classList.remove('border-transparent', 'text-gray-500');
+        
+        dashboardTabContents.forEach(content => {
+            content.classList.add('hidden');
+        });
+        
+        document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
+        
+        // ✅ NOVO: Redesenhar gráficos quando voltar para "Visão Geral"
+        if (tabName === 'visao-geral') {
+            setTimeout(() => {
+                if (profileChart) {
+                    profileChart.resize();
+                    profileChart.update('none');
+                }
+                if (monthlyAvailabilityChart) {
+                    monthlyAvailabilityChart.resize();
+                    monthlyAvailabilityChart.update('none');
+                }
+            }, 100);
+        }
     });
+});
 
     // Collapsible headers
     document.querySelectorAll('.collapsible-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const content = header.nextElementSibling;
-            const icon = header.querySelector('svg');
+    header.addEventListener('click', () => {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('svg');
+        
+        const wasHidden = content.classList.contains('hidden');
+        
+        if (wasHidden) {
+            content.classList.remove('hidden');
+            icon?.classList.add('rotate-180');
             
-            if (content.classList.contains('hidden')) {
-                content.classList.remove('hidden');
-                icon?.classList.add('rotate-180');
-            } else {
-                content.classList.add('hidden');
-                icon?.classList.remove('rotate-180');
-            }
-        });
+            // ✅ NOVO: Redesenhar gráficos após abrir collapsible
+            setTimeout(() => {
+                // Verificar se o collapsible contém gráficos
+                const chartCanvas = content.querySelector('canvas');
+                if (chartCanvas) {
+                    const chartId = chartCanvas.id;
+                    
+                    if (chartId === 'profile-distribution-chart' && profileChart) {
+                        profileChart.resize();
+                        profileChart.update('none');
+                    } else if (chartId === 'monthly-availability-chart' && monthlyAvailabilityChart) {
+                        monthlyAvailabilityChart.resize();
+                        monthlyAvailabilityChart.update('none');
+                    }
+                }
+            }, 350); // Aguardar animação CSS terminar
+        } else {
+            content.classList.add('hidden');
+            icon?.classList.remove('rotate-180');
+        }
     });
+});
 
     // ===== FERIADOS NACIONAIS DO BRASIL =====
     function getFeriadosNacionais(ano) {
@@ -927,6 +995,27 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         if (filterProf) filtered = filtered.filter(a => a.profissionalId === filterProf);
         if (filterProj) filtered = filtered.filter(a => a.projetoId === filterProj);
 
+        // ✅ ORDENAÇÃO: Primeiro por profissional (alfabética), depois por período (data início)
+        filtered.sort((a, b) => {
+            const profA = appState.profissionais.find(p => p.id === a.profissionalId);
+            const profB = appState.profissionais.find(p => p.id === b.profissionalId);
+            
+            const nomeA = profA?.nome || '';
+            const nomeB = profB?.nome || '';
+            
+            // Comparar nomes (ordem alfabética)
+            const comparacaoNome = nomeA.localeCompare(nomeB);
+            
+            // Se os nomes são iguais, ordenar por data de início
+            if (comparacaoNome === 0) {
+                const dataA = new Date(a.dataInicio + 'T00:00:00');
+                const dataB = new Date(b.dataInicio + 'T00:00:00');
+                return dataA - dataB;
+            }
+            
+            return comparacaoNome;
+        });
+
         const rows = filtered.map(aloc => {
             const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
             const proj = appState.projetos.find(p => p.id === aloc.projetoId);
@@ -1274,163 +1363,150 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 
     function updateProfissionaisAllocationTable() {
-        const tbody = document.getElementById('dashboard-profissionais-table');
-        if (!tbody) return;
+    const tbody = document.getElementById('dashboard-profissionais-table');
+    if (!tbody) return;
 
-        const filterNome = document.getElementById('dashboard-filter-nome')?.value.toLowerCase() || '';
-        const filterTime = document.getElementById('dashboard-filter-time')?.value || '';
-        const filterLider = document.getElementById('dashboard-filter-lider')?.value || '';
-        const filterProjeto = document.getElementById('dashboard-filter-projeto')?.value || '';
-        const filterInicio = document.getElementById('dashboard-filter-inicio')?.value || '';
-        const filterFim = document.getElementById('dashboard-filter-fim')?.value || '';
+    const filterNome = document.getElementById('dashboard-filter-nome')?.value.toLowerCase() || '';
+    const filterTime = document.getElementById('dashboard-filter-time')?.value || '';
+    const filterLider = document.getElementById('dashboard-filter-lider')?.value || '';
+    const filterProjeto = document.getElementById('dashboard-filter-projeto')?.value || '';
+    const filterInicio = document.getElementById('dashboard-filter-inicio')?.value || '';
+    const filterFim = document.getElementById('dashboard-filter-fim')?.value || '';
 
-        const temFiltroPeriodo = filterInicio && filterFim;
-        let periodoInicio, periodoFim;
-        
-        if (temFiltroPeriodo) {
-            periodoInicio = new Date(filterInicio + 'T00:00:00');
-            periodoFim = new Date(filterFim + 'T00:00:00');
-        } else {
-            periodoInicio = new Date();
-            periodoInicio.setHours(0, 0, 0, 0);
-            periodoFim = new Date(periodoInicio);
+    const temFiltroPeriodo = filterInicio && filterFim;
+    let periodoInicio, periodoFim;
+    
+    if (temFiltroPeriodo) {
+        periodoInicio = new Date(filterInicio + 'T00:00:00');
+        periodoFim = new Date(filterFim + 'T00:00:00');
+    } else {
+        periodoInicio = new Date();
+        periodoInicio.setHours(0, 0, 0, 0);
+        periodoFim = new Date(periodoInicio);
+    }
+
+    let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
+
+    if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
+    if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
+    if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
+
+    const rows = filtered.map(prof => {
+        let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
+
+        if (filterProjeto) {
+            alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
         }
 
-        let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
-
-        if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
-        if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
-        if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
-
-        const rows = filtered.map(prof => {
-            let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
-
-            if (filterProjeto) {
-                alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
-            }
-
-            if (temFiltroPeriodo) {
-                alocacoes = alocacoes.filter(a => {
-                    const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-                    const alocFim = new Date(a.dataFim + 'T00:00:00');
-                    return alocInicio <= periodoFim && alocFim >= periodoInicio;
-                });
-            }
-
-            const alocacoesNoPeriodo = alocacoes.filter(a => {
-                const inicio = new Date(a.dataInicio + 'T00:00:00');
-                const fim = new Date(a.dataFim + 'T00:00:00');
-                return inicio <= periodoFim && fim >= periodoInicio;
+        if (temFiltroPeriodo) {
+            alocacoes = alocacoes.filter(a => {
+                const alocInicio = new Date(a.dataInicio + 'T00:00:00');
+                const alocFim = new Date(a.dataFim + 'T00:00:00');
+                return alocInicio <= periodoFim && alocFim >= periodoInicio;
             });
+        }
 
-            // ✅ CALCULAR SOBREPOSIÇÃO REAL - não apenas somar
-            let percentualNoPeriodo = 0;
-
-            if (alocacoesNoPeriodo.length > 0) {
-                // Pegar todos os dias únicos das alocações
-                const datasUnicas = new Set();
-                alocacoesNoPeriodo.forEach(a => {
-                    const inicio = new Date(a.dataInicio + 'T00:00:00');
-                    const fim = new Date(a.dataFim + 'T00:00:00');
-                    
-                    // Limitar ao período do filtro
-                    const inicioReal = inicio < periodoInicio ? periodoInicio : inicio;
-                    const fimReal = fim > periodoFim ? periodoFim : fim;
-                    
-                    // Adicionar cada dia
-                    for (let d = new Date(inicioReal); d <= fimReal; d.setDate(d.getDate() + 1)) {
-                        datasUnicas.add(d.toISOString().split('T')[0]);
-                    }
-                });
-                
-                // Para cada dia, calcular o percentual total alocado
-                let maxPercentual = 0;
-                datasUnicas.forEach(dia => {
-                    const diaDate = new Date(dia + 'T00:00:00');
-                    let percentualDia = 0;
-                    
-                    alocacoesNoPeriodo.forEach(a => {
-                        const inicio = new Date(a.dataInicio + 'T00:00:00');
-                        const fim = new Date(a.dataFim + 'T00:00:00');
-                        
-                        // Se a alocação está ativa neste dia, somar
-                        if (diaDate >= inicio && diaDate <= fim) {
-                            percentualDia += parseInt(a.percentual) || 0;
-                        }
-                    });
-                    
-                    // Guardar o maior percentual encontrado
-                    if (percentualDia > maxPercentual) {
-                        maxPercentual = percentualDia;
-                    }
-                });
-                
-                percentualNoPeriodo = maxPercentual;
-            }
-            
-            const status = percentualNoPeriodo === 0 ? 'Disponível' : 
-                          percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
-                          'Parcialmente Alocado';
-            const statusColor = percentualNoPeriodo === 0 ? 'text-green-600' : 
-                               percentualNoPeriodo >= 100 ? 'text-blue-600' : 
-                               'text-yellow-600';
-
-            const projetos = alocacoes.map(a => {
-                const proj = appState.projetos.find(p => p.id === a.projetoId);
-                return proj?.nome || 'N/A';
-            });
-            const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
-
-            let proximaDisponibilidade;
-            
-            // ✅ Pegar TODAS as alocações do profissional para calcular disponibilidade corretamente
-            const todasAlocacoesProfissional = appState.alocacoes.filter(a => a.profissionalId === prof.id);
-            
-            if (percentualNoPeriodo === 0) {
-                // Verificar se há alocações futuras
-                const alocacoesFuturas = todasAlocacoesProfissional
-                    .filter(a => new Date(a.dataInicio + 'T00:00:00') > periodoFim)
-                    .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
-                
-                if (alocacoesFuturas.length > 0) {
-                    const proximaAlocacao = alocacoesFuturas[0];
-                    proximaDisponibilidade = `Disponível até ${formatDate(proximaAlocacao.dataInicio)}`;
-                } else {
-                    proximaDisponibilidade = 'Disponível agora';
-                }
-            } else if (percentualNoPeriodo >= 100) {
-                // ✅ Pegar a última alocação considerando TODAS as alocações do profissional
-                const todasAlocacoesOrdenadas = todasAlocacoesProfissional
-                    .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
-                
-                if (todasAlocacoesOrdenadas.length > 0) {
-                    const ultimaAlocacao = todasAlocacoesOrdenadas[0];
-                    const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
-                    dataTermino.setDate(dataTermino.getDate() + 1);
-                    proximaDisponibilidade = `A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
-                } else {
-                    proximaDisponibilidade = 'Verificar alocações';
-                }
-            } else {
-                const disponivel = 100 - percentualNoPeriodo;
-                proximaDisponibilidade = `${disponivel}% disponível no período`;
-            }
-
-            return `
-                <tr class="bg-white border-b hover:bg-gray-50">
-                    <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
-                    <td class="px-6 py-4">${prof.perfil}</td>
-                    <td class="px-6 py-4">${prof.time}</td>
-                    <td class="px-6 py-4">${projetosUnicos}</td>
-                    <td class="px-6 py-4 ${statusColor} font-semibold">${status}</td>
-                    <td class="px-6 py-4">${percentualNoPeriodo}%</td>
-                    <td class="px-6 py-4">${proximaDisponibilidade}</td>
-                </tr>
-            `;
+        const alocacoesNoPeriodo = alocacoes.filter(a => {
+            const inicio = new Date(a.dataInicio + 'T00:00:00');
+            const fim = new Date(a.dataFim + 'T00:00:00');
+            return inicio <= periodoFim && fim >= periodoInicio;
         });
 
-        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-    }
+        // ✅ CORREÇÃO: CALCULAR SOBREPOSIÇÃO REAL DIA A DIA
+        let percentualNoPeriodo = 0;
+
+        for (let d = new Date(periodoInicio); d <= periodoFim; d.setDate(d.getDate() + 1)) {
+            let percentualDia = 0;
+            
+            alocacoesNoPeriodo.forEach(aloc => {
+                const inicio = new Date(aloc.dataInicio + 'T00:00:00');
+                const fim = new Date(aloc.dataFim + 'T00:00:00');
+                
+                if (d >= inicio && d <= fim) {
+                    percentualDia += parseInt(aloc.percentual) || 0;
+                }
+            });
+            
+            if (percentualDia > percentualNoPeriodo) {
+                percentualNoPeriodo = percentualDia;
+            }
+        }
+        
+        const status = percentualNoPeriodo === 0 ? 'Disponível' : 
+                      percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
+                      'Parcialmente Alocado';
+        const statusColor = percentualNoPeriodo === 0 ? 'text-green-600' : 
+                           percentualNoPeriodo >= 100 ? 'text-blue-600' : 
+                           'text-yellow-600';
+
+        const projetos = alocacoes.map(a => {
+            const proj = appState.projetos.find(p => p.id === a.projetoId);
+            return proj?.nome || 'N/A';
+        });
+        const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
+
+        let proximaDisponibilidade;
+        
+        if (percentualNoPeriodo === 0) {
+            proximaDisponibilidade = 'Disponível agora';
+        } else if (percentualNoPeriodo >= 100) {
+            const alocacoesAtivas = alocacoesNoPeriodo
+                .filter(a => new Date(a.dataFim + 'T00:00:00') >= periodoInicio)
+                .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
+            
+            if (alocacoesAtivas.length > 0) {
+                const ultimaAlocacao = alocacoesAtivas[0];
+                const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
+                dataTermino.setDate(dataTermino.getDate() + 1);
+                proximaDisponibilidade = `A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
+            } else {
+                proximaDisponibilidade = 'Verificar alocações';
+            }
+        } else {
+            const disponivel = 100 - percentualNoPeriodo;
+            proximaDisponibilidade = `${disponivel}% disponível no período`;
+        }
+
+        // ✅ FORMATAÇÃO VISUAL COM ALERTA DE SOBRE-ALOCAÇÃO
+        let alocacaoDisplay;
+        let alocacaoClass;
+        let alocacaoTitle;
+        
+        if (percentualNoPeriodo === 0) {
+            alocacaoDisplay = '0%';
+            alocacaoClass = 'text-gray-600';
+            alocacaoTitle = 'Nenhuma alocação no período';
+        } else if (percentualNoPeriodo > 100) {
+            alocacaoDisplay = '100% ⚠️';
+            alocacaoClass = 'text-red-600 font-bold';
+            alocacaoTitle = `⚠️ SOBRE-ALOCADO: ${percentualNoPeriodo}% máximo em algum dia (${alocacoesNoPeriodo.length} alocações)`;
+        } else if (percentualNoPeriodo === 100) {
+            alocacaoDisplay = '100%';
+            alocacaoClass = 'text-blue-600 font-semibold';
+            alocacaoTitle = 'Totalmente alocado no período';
+        } else {
+            alocacaoDisplay = `${percentualNoPeriodo}%`;
+            alocacaoClass = 'text-yellow-600';
+            alocacaoTitle = `${percentualNoPeriodo}% máximo de alocação no período`;
+        }
+
+        return `
+            <tr class="bg-white border-b hover:bg-gray-50">
+                <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
+                <td class="px-6 py-4">${prof.perfil}</td>
+                <td class="px-6 py-4">${prof.time}</td>
+                <td class="px-6 py-4">${projetosUnicos}</td>
+                <td class="px-6 py-4 ${statusColor} font-semibold">${status}</td>
+                <td class="px-6 py-4 ${alocacaoClass}" title="${alocacaoTitle}" style="cursor: help;">
+                    ${alocacaoDisplay}
+                </td>
+                <td class="px-6 py-4">${proximaDisponibilidade}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
+}
 
     function updateProjetosTable() {
         const tbody = document.getElementById('dashboard-projetos-table');
@@ -1611,6 +1687,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const canvas = document.getElementById('profile-distribution-chart');
         if (!canvas) return;
 
+        // ✅ Verificar se o canvas está visível
+        const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
+        if (!isVisible) {
+            console.log('⏳ Canvas do perfil não visível, tentando novamente...');
+            setTimeout(updateProfileChart, 200);
+            return;
+        }
+
         const profiles = {};
         appState.profissionais.filter(p => p.ativo !== 'Não').forEach(p => {
             profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
@@ -1620,7 +1704,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const data = Object.values(profiles);
         const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-        if (profileChart) profileChart.destroy();
+        if (profileChart) {
+            profileChart.destroy();
+            profileChart = null;
+        }
+
+        // ✅ Forçar dimensões do container antes de criar o gráfico
+        const container = canvas.parentElement;
+        container.style.height = '240px';
+        container.style.width = '100%';
 
         profileChart = new Chart(canvas, {
             type: 'doughnut',
@@ -1640,8 +1732,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     padding: {
                         top: 30,
                         bottom: 30,
-						left: 10,
-						right: 10
+                        left: 10,
+                        right: 10
                     }
                 },
                 plugins: {
@@ -1680,13 +1772,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                         color: '#fff',
                         font: { weight: 'bold', size: 14 },
                         formatter: (value) => value,
-						anchor: 'center',
-						align: 'center' 
+                        anchor: 'center',
+                        align: 'center' 
                     }
                 }
             },
             plugins: [ChartDataLabels]
         });
+
+        console.log('✅ Gráfico de perfil renderizado');
     }
 
     function updateMonthlyAvailabilityChart() {
@@ -2212,6 +2306,531 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     console.log('🎉 Linha "Hoje" adicionada com sucesso!');
 }
+        // ===== ⭐ INÍCIO: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
+    const kimaiFileInput = document.getElementById('kimai-file-input');
+    const selectedFileInfo = document.getElementById('selected-file-info');
+    const processKimaiBtn = document.getElementById('process-kimai-btn');
+    const removeFileBtn = document.getElementById('remove-file-btn');
+    let selectedFile = null;
+
+    // Drag and drop
+    const dropArea = kimaiFileInput?.parentElement?.parentElement;
+    if (dropArea) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('border-indigo-500', 'bg-indigo-50');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('border-indigo-500', 'bg-indigo-50');
+            });
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+    }
+
+    // Seleção de arquivo
+    kimaiFileInput?.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+
+    // Remover arquivo
+    removeFileBtn?.addEventListener('click', () => {
+        selectedFile = null;
+        kimaiFileInput.value = '';
+        selectedFileInfo?.classList.add('hidden');
+        processKimaiBtn?.classList.add('hidden');
+    });
+
+    // Processar importação
+    processKimaiBtn?.addEventListener('click', async () => {
+        if (selectedFile) {
+            await processKimaiImport(selectedFile);
+        }
+    });
+
+    function handleFileSelect(file) {
+        const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+            showNotification('Por favor, selecione um arquivo Excel válido (.xlsx ou .xls)', 'error');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            showNotification('Arquivo muito grande! Máximo: 10MB', 'error');
+            return;
+        }
+
+        selectedFile = file;
+
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        
+        if (fileName) fileName.textContent = file.name;
+        if (fileSize) fileSize.textContent = formatFileSize(file.size);
+        
+        selectedFileInfo?.classList.remove('hidden');
+        processKimaiBtn?.classList.remove('hidden');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    async function processKimaiImport(file) {
+        try {
+            showNotification('Processando arquivo...', 'info');
+            processKimaiBtn.disabled = true;
+            processKimaiBtn.innerHTML = '<span class="loading-inline mr-2"></span>Processando...';
+
+            const data = await readExcelFile(file);
+            
+            if (!data || data.length === 0) {
+                throw new Error('Arquivo vazio ou formato inválido');
+            }
+
+            console.log('📊 Dados lidos do Excel:', data.length, 'linhas');
+
+            const result = await processKimaiData(data);
+
+            displayImportResults(result);
+
+            showNotification(`✅ Importação concluída! ${result.updated} alocações atualizadas.`, 'success');
+
+        } catch (error) {
+            console.error('❌ Erro na importação:', error);
+            showNotification('Erro ao processar arquivo: ' + error.message, 'error');
+        } finally {
+            processKimaiBtn.disabled = false;
+            processKimaiBtn.innerHTML = `
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Processar Importação
+            `;
+        }
+    }
+
+    function readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    
+                    // ✅ CORREÇÃO: Usar objetos em vez de arrays
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, {
+                        raw: false,  // Converter tudo para string
+                        defval: ''   // Valores vazios como string vazia
+                    });
+                    
+                    console.log('📊 Registros lidos:', jsonData.length);
+                    console.log('📋 Primeiras colunas:', Object.keys(jsonData[0] || {}));
+                    
+                    resolve(jsonData);
+                } catch (error) {
+                    reject(new Error('Erro ao ler arquivo Excel: ' + error.message));
+                }
+            };
+            
+            reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // ===== ⭐ PROCESSAMENTO v2.0 - GRANULAR POR DATA =====
+    async function processKimaiData(excelData) {
+        const result = {
+            processed: 0,
+            updated: 0,
+            skipped: 0,
+            errors: [],
+            details: []
+        };
+
+        console.log('🔍 Processando', excelData.length, 'registros...');
+
+        // ✅ NOVO: Processar diretamente os objetos JSON
+        const registrosPorAlocacao = new Map();
+
+        for (const row of excelData) {
+            const nomeProjeto = String(row['Projeto'] || '').trim();
+            const nomeUsuario = String(row['Usuário'] || row['Nome'] || '').trim();
+            const duracaoStr = String(row['Duração'] || '').trim();
+            const dataStr = String(row['Data'] || '').trim();
+
+            // Pular linhas vazias
+            if (!nomeProjeto || !nomeUsuario || !duracaoStr || !dataStr) {
+                continue;
+            }
+
+            // Converter data para formato ISO
+            const dataISO = parseDate(dataStr);
+            if (!dataISO) {
+                const errorMsg = `⚠️ Formato de data não reconhecido: "${dataStr}"`;
+                if (!result.errors.includes(errorMsg)) {
+                    result.errors.push(errorMsg);
+                }
+                continue;
+            }
+
+            // ✅ CORREÇÃO: Converter duração para horas
+            const horas = parseDuration(duracaoStr);
+            
+            console.log(`📊 ${nomeUsuario} | ${nomeProjeto} | ${dataStr} | "${duracaoStr}" → ${horas}h`);
+            
+            if (horas === 0) {
+                console.warn(`⚠️ Duração zero: "${duracaoStr}"`);
+                continue;
+            }
+
+            const key = `${nomeUsuario}|${nomeProjeto}`;
+            
+            if (!registrosPorAlocacao.has(key)) {
+                registrosPorAlocacao.set(key, {
+                    nomeUsuario,
+                    nomeProjeto,
+                    registrosPorData: new Map(),
+                    totalHoras: 0
+                });
+            }
+
+            const alocacao = registrosPorAlocacao.get(key);
+            const horasExistentes = alocacao.registrosPorData.get(dataISO) || 0;
+            alocacao.registrosPorData.set(dataISO, horasExistentes + horas);
+            alocacao.totalHoras += horas;
+        }
+
+        console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
+
+        // ✅ LOG DE DEBUG: Mostrar totais
+        for (const [key, dados] of registrosPorAlocacao.entries()) {
+            console.log(`👤 ${key}: ${dados.totalHoras.toFixed(2)}h (${dados.registrosPorData.size} dias)`);
+        }
+
+        // Atualizar alocações no Firestore
+        for (const [key, dadosNovos] of registrosPorAlocacao.entries()) {
+            const { nomeUsuario, nomeProjeto, registrosPorData, totalHoras } = dadosNovos;
+            
+            result.processed++;
+
+            try {
+                // Encontrar profissional
+                const profissional = appState.profissionais.find(p => 
+                    p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
+                    nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
+                );
+
+                if (!profissional) {
+                    result.skipped++;
+                    result.errors.push(`Profissional não encontrado: ${nomeUsuario}`);
+                    console.warn(`❌ Profissional não encontrado: ${nomeUsuario}`);
+                    continue;
+                }
+
+                // Encontrar projeto
+                const projeto = appState.projetos.find(p => 
+                    p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
+                    nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
+                );
+
+                if (!projeto) {
+                    result.skipped++;
+                    result.errors.push(`Projeto não encontrado: ${nomeProjeto}`);
+                    console.warn(`❌ Projeto não encontrado: ${nomeProjeto}`);
+                    continue;
+                }
+
+                // Encontrar alocação
+                const alocacao = appState.alocacoes.find(a => 
+                    a.profissionalId === profissional.id && 
+                    a.projetoId === projeto.id
+                );
+
+                if (!alocacao) {
+                    result.skipped++;
+                    result.errors.push(`Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
+                    console.warn(`❌ Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
+                    continue;
+                }
+
+                // ✅ CORREÇÃO: Usar totalHoras calculado
+                const registrosAntigos = alocacao.registrosPorData || {};
+                const registrosNovos = Object.fromEntries(registrosPorData);
+                
+                const novoTotal = Math.round(totalHoras); // Usar totalHoras, não recalcular
+
+                console.log(`💾 Salvando: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
+
+                // Atualizar no Firestore
+                await setDoc(doc(db, getCollectionPath('alocacoes'), alocacao.id), {
+                    ...alocacao,
+                    horasRealizadas: novoTotal,
+                    registrosPorData: registrosNovos,
+                    ultimaImportacao: new Date().toISOString()
+                });
+
+                result.updated++;
+                result.details.push({
+                    profissional: profissional.nome,
+                    projeto: projeto.nome,
+                    horasAntes: alocacao.horasRealizadas || 0,
+                    horasDepois: novoTotal,
+                    diferenca: novoTotal - (alocacao.horasRealizadas || 0)
+                });
+
+                console.log(`✅ Atualizado: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
+
+            } catch (error) {
+                result.errors.push(`Erro ao atualizar ${nomeUsuario} → ${nomeProjeto}: ${error.message}`);
+                console.error('❌ Erro:', error);
+            }
+        }
+
+        return result;
+    }
+
+    // ===== NOVA FUNÇÃO: Comparar registros por data (CORRIGIDA) =====
+    function compararRegistrosPorData(antigos, novos) {
+        const comparacao = {
+            diasNovos: [],
+            diasAlterados: [],
+            diasRemovidos: [],
+            diasInalterados: 0
+        };
+
+        const todasAsDatas = new Set([
+            ...Object.keys(antigos),
+            ...Object.keys(novos)
+        ]);
+
+        for (const data of todasAsDatas) {
+            // ✅ CORREÇÃO AQUI: Arredonda para 2 casas decimais
+            const horasAntigas = Math.round((antigos[data] || 0) * 100) / 100;
+            const horasNovas = Math.round((novos[data] || 0) * 100) / 100;
+
+            if (horasAntigas === 0 && horasNovas > 0) {
+                comparacao.diasNovos.push({ data, horas: horasNovas });
+            } else if (horasAntigas > 0 && horasNovas === 0) {
+                comparacao.diasRemovidos.push({ data, horas: horasAntigas });
+            } else if (horasAntigas !== horasNovas) {
+                comparacao.diasAlterados.push({ 
+                    data, 
+                    horasAntes: horasAntigas, 
+                    horasDepois: horasNovas,
+                    diferenca: horasNovas - horasAntigas
+                });
+            } else {
+                comparacao.diasInalterados++;
+            }
+        }
+
+        return comparacao;
+    }
+
+    // ===== NOVA FUNÇÃO: Parse de data (CORRIGIDA) =====
+    // ===== NOVA FUNÇÃO: Parse de data (v3.0 - Mais Robusta) =====
+    function parseDate(dateStr) {
+        dateStr = String(dateStr).trim();
+
+        // 1. Tentar converter número serial do Excel (ex: 45733)
+        if (/^\d{4,5}$/.test(dateStr)) {
+            try {
+                const excelSerialDate = parseInt(dateStr, 10);
+                // 25569 é o offset entre 01/01/1900 (Excel) e 01/01/1970 (Unix)
+                const jsTimestamp = (excelSerialDate - 25569) * 86400 * 1000;
+                const date = new Date(jsTimestamp);
+                const utcDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
+                if (!isNaN(utcDate.getTime())) {
+                    return utcDate.toISOString().split('T')[0];
+                }
+            } catch (e) { /* falha, tenta outros formatos */ }
+        }
+
+        // 2. Tentar formatos comuns (ISO, BR, US, Alemão) com hífens, barras ou pontos
+        // Regex para YYYY-MM-DD
+        let match = dateStr.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/);
+        if (match) {
+            return `${match[1]}-${match[2]}-${match[3]}`;
+        }
+        
+        // Regex para DD/MM/YYYY (BR) ou DD.MM.YYYY (Alemão)
+        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+        if (match) {
+            // Assumindo formato DD/MM/YYYY
+            return `${match[3]}-${match[2]}-${match[1]}`;
+        }
+
+        // Regex para MM/DD/YYYY (US)
+        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+        if (match) {
+            // Se o primeiro grupo (MM) for > 12, é provável que seja DD/MM/YYYY
+            if (parseInt(match[1], 10) > 12) {
+                return `${match[3]}-${match[2]}-${match[1]}`; // Formato BR
+            }
+            // Assumindo formato MM/DD/YYYY
+            return `${match[3]}-${match[1]}-${match[2]}`;
+        }
+        
+        // 3. Último recurso: Deixar o JavaScript tentar adivinhar
+        try {
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString().split('T')[0];
+            }
+        } catch (e) {
+            // Ignorar
+        }
+        
+        // Se tudo falhar, retorna null para ser tratado como erro
+        console.warn('Formato de data não reconhecido:', dateStr);
+        return null;
+    }
+
+    function parseDuration(durationStr) {
+        durationStr = String(durationStr).trim();
+        
+        // ✅ NOVO: Verificar formato "X days HH:MM:SS"
+        if (durationStr.includes('days') || durationStr.includes('day')) {
+            const partes = durationStr.split(/days?/i); // case-insensitive
+            const dias = parseInt(partes[0].trim()) || 0;
+            const tempoStr = partes[1].trim();
+            
+            // Processar a parte de tempo HH:MM:SS
+            const timeParts = tempoStr.split(':').map(p => parseInt(p) || 0);
+            const hours = (timeParts[0] || 0);
+            const minutes = (timeParts[1] || 0);
+            const seconds = (timeParts[2] || 0);
+            
+            // ✅ CORREÇÃO CRÍTICA: Converter dias em horas + tempo
+            const totalHoras = (dias * 24) + hours + (minutes / 60) + (seconds / 3600);
+            
+            console.log(`🔍 Convertendo: "${durationStr}" → ${totalHoras.toFixed(2)}h`);
+            
+            return Math.round(totalHoras * 100) / 100; // 2 casas decimais
+        }
+        
+        // Formato HH:MM ou HH:MM:SS
+        if (durationStr.includes(':')) {
+            const parts = durationStr.split(':').map(p => parseInt(p) || 0);
+            const hours = parts[0] || 0;
+            const minutes = parts[1] || 0;
+            const seconds = parts[2] || 0;
+            return hours + (minutes / 60) + (seconds / 3600);
+        }
+        
+        // Formato decimal (1.5, 2.0, etc)
+        const num = parseFloat(durationStr.replace(',', '.'));
+        if (!isNaN(num)) {
+            if (num < 24) return num;
+            return num / 60;
+        }
+        
+        return 0;
+    }
+
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDA) =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (Com Expandir/Recolher) =====
+    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDO: Mostra decimais) =====
+    function displayImportResults(result) {
+        const importResults = document.getElementById('import-results');
+        const importSummary = document.getElementById('import-summary');
+        
+        if (!importResults || !importSummary) return;
+
+        let html = `
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm text-blue-600 font-medium">Processadas</p>
+                    <p class="text-2xl font-bold text-blue-900">${result.processed}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <p class="text-sm text-green-600 font-medium">Atualizadas</p>
+                    <p class="text-2xl font-bold text-green-900">${result.updated}</p>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg">
+                    <p class="text-sm text-yellow-600 font-medium">Ignoradas</p>
+                    <p class="text-2xl font-bold text-yellow-900">${result.skipped}</p>
+                </div>
+            </div>
+        `;
+
+        if (result.details.length > 0) {
+            html += `
+                <div class="mb-6">
+                    <h4 class="font-semibold text-gray-800 mb-3">📋 Detalhes das Atualizações:</h4>
+                    <div class="space-y-3">
+                        ${result.details.map(d => {
+                            const diferencaHoras = d.diferenca || 0;
+                            const sinal = diferencaHoras > 0 ? '+' : '';
+                            const corDiferenca = diferencaHoras > 0 ? 'text-green-600' : 
+                                                 diferencaHoras < 0 ? 'text-red-600' : 'text-gray-600';
+                            
+                            return `
+                                <div class="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                    <p class="font-semibold text-gray-900 mb-2">${d.profissional} → ${d.projeto}</p>
+                                    <div class="flex gap-4 text-sm">
+                                        <span class="text-gray-600">Antes: <strong>${d.horasAntes}h</strong></span>
+                                        <span class="${corDiferenca} font-bold">
+                                            ${sinal}${diferencaHoras}h
+                                        </span>
+                                        <span class="text-indigo-600">Depois: <strong>${d.horasDepois}h</strong></span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (result.errors.length > 0) {
+            html += `
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg mt-6">
+                    <h4 class="font-semibold text-yellow-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
+                    <ul class="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                        ${result.errors.slice(0, 5).map(err => `<li>${err}</li>`).join('')}
+                        ${result.errors.length > 5 ? `<li class="font-semibold">... e mais ${result.errors.length - 5} avisos</li>` : ''}
+                    </ul>
+                </div>
+            `;
+        }
+
+        importSummary.innerHTML = html;
+        importResults.classList.remove('hidden');
+        
+        // Scroll suave até os resultados
+        setTimeout(() => {
+            importResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    }
+    // ===== ⭐ FIM: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
+
 
     // Inicialização da view inicial
     switchView('dashboard');
