@@ -995,6 +995,27 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         if (filterProf) filtered = filtered.filter(a => a.profissionalId === filterProf);
         if (filterProj) filtered = filtered.filter(a => a.projetoId === filterProj);
 
+        // ✅ ORDENAÇÃO: Primeiro por profissional (alfabética), depois por período (data início)
+        filtered.sort((a, b) => {
+            const profA = appState.profissionais.find(p => p.id === a.profissionalId);
+            const profB = appState.profissionais.find(p => p.id === b.profissionalId);
+            
+            const nomeA = profA?.nome || '';
+            const nomeB = profB?.nome || '';
+            
+            // Comparar nomes (ordem alfabética)
+            const comparacaoNome = nomeA.localeCompare(nomeB);
+            
+            // Se os nomes são iguais, ordenar por data de início
+            if (comparacaoNome === 0) {
+                const dataA = new Date(a.dataInicio + 'T00:00:00');
+                const dataB = new Date(b.dataInicio + 'T00:00:00');
+                return dataA - dataB;
+            }
+            
+            return comparacaoNome;
+        });
+
         const rows = filtered.map(aloc => {
             const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
             const proj = appState.projetos.find(p => p.id === aloc.projetoId);
