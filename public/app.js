@@ -1711,7 +1711,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         // ✅ Forçar dimensões do container antes de criar o gráfico
         const container = canvas.parentElement;
-        container.style.height = '240px';
+        container.style.height = '320px';
         container.style.width = '100%';
 
         profileChart = new Chart(canvas, {
@@ -1730,10 +1730,10 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 maintainAspectRatio: false,
                 layout: {
                     padding: {
-                        top: 30,
-                        bottom: 30,
-                        left: 10,
-                        right: 10
+                        top: 40,
+                        bottom: 40,
+                        left: 20,
+                        right: 20
                     }
                 },
                 plugins: {
@@ -1835,8 +1835,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     if (monthlyAvailabilityChart) monthlyAvailabilityChart.destroy();
 
     // ✅ CÁLCULO MELHORADO DA ALTURA
-    const minHeight = 400;
-    const pixelsPorProfissional = 30; // ✅ Altura total do gráfico, se reduzir aumenta
+    const minHeight = 500;
+    const pixelsPorProfissional = 45; // ✅ Altura total do gráfico, se reduzir aumenta
     const alturaCalculada = Math.max(minHeight, profissionais.length * pixelsPorProfissional);
     
     canvas.style.height = `${alturaCalculada}px`;
@@ -1852,9 +1852,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 borderColor: '#4338ca',
                 borderWidth: 1,
                 barThickness: 'flex',
-                maxBarThickness: 40,  // ✅ REDUZIDO de 40 para 35
-                categoryPercentage: 0.8,  // ✅ ADICIONADO - Controla espaço a área de cada barra
-                barPercentage: 0.6        // ✅ ADICIONADO - Controla largura da barra
+                maxBarThickness: 35,  // ✅ REDUZIDO de 40 para 35
+                categoryPercentage: 0.7,  // ✅ ADICIONADO - Controla espaço a área de cada barra
+                barPercentage: 0.5        // ✅ ADICIONADO - Controla largura da barra
             }]
         },
         options: {
@@ -1863,10 +1863,10 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             maintainAspectRatio: false,
             layout: {
                 padding: {
-                    left: 15,    // ✅ AUMENTADO de 10 para 15
-                    right: 30,
-                    top: 15,     // ✅ AUMENTADO de 10 para 15
-                    bottom: 15   // ✅ AUMENTADO de 10 para 15
+                    left: 20,    // ✅ AUMENTADO de 15 para 20
+                    right: 40,   // ✅ AUMENTADO de 30 para 40
+                    top: 20,     // ✅ AUMENTADO de 15 para 20
+                    bottom: 20   // ✅ AUMENTADO de 15 para 20
                 }
             },
             plugins: {
@@ -1905,9 +1905,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     ticks: {
                         autoSkip: false,
                         font: { 
-                            size: 10  // ✅ REDUZIDO de 11 para 10
+                            size: 11  // ✅ Mudou de 10 para 11
                         },
-                        padding: 12,  // ✅ AUMENTADO de 8 para 12
+                        padding: 15,  // ✅ Mudou de 10 para 15
                         color: '#374151',
                         // ✅ TRUNCAR NOMES LONGOS
                         callback: function(value, index) {
