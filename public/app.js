@@ -1,6 +1,6 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.0 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.1 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 05/11/25 - 13:40
+// Última atualização: 07/11/25 - 12:52
 // Com Importação de Hr do Kimai
 
 // Importações do Firebase
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.2.1';
 const APP_NAME = 'ECS System';
 let app;
 let db;
