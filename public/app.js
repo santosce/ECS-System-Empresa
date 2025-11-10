@@ -2838,7 +2838,6 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     // Inicialização da view inicial
     switchView('dashboard');
-}
 
 // ===== INICIALIZAÇÃO =====
 initializeFirebase();
