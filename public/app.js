@@ -1,6 +1,6 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.1 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.2 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 07/11/25 - 12:52
+// Última atualização: 10/11/25 - 16:50
 // Com Importação de Hr do Kimai
 
 // Importações do Firebase
@@ -1380,9 +1380,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         periodoInicio = new Date(filterInicio + 'T00:00:00');
         periodoFim = new Date(filterFim + 'T00:00:00');
     } else {
+        // Primeiro dia do mês atual
         periodoInicio = new Date();
+        periodoInicio.setDate(1);
         periodoInicio.setHours(0, 0, 0, 0);
-        periodoFim = new Date(periodoInicio);
+        
+        // 2 anos no futuro
+        periodoFim = new Date();
+        periodoFim.setFullYear(periodoFim.getFullYear() + 2);
+        periodoFim.setHours(23, 59, 59, 999);
     }
 
     let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
@@ -1398,12 +1404,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
         }
 
-        if (temFiltroPeriodo) {
-            alocacoes = alocacoes.filter(a => {
-                const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-                const alocFim = new Date(a.dataFim + 'T00:00:00');
-                return alocInicio <= periodoFim && alocFim >= periodoInicio;
-            });
+        // ✅ CORREÇÃO: Se filtrou por projeto e não há alocações, não mostrar profissional
+        if (filterProjeto && alocacoes.length === 0) {
+            return null;
         }
 
         const alocacoesNoPeriodo = alocacoes.filter(a => {
@@ -1505,7 +1508,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         `;
     });
 
-    tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
+    tbody.innerHTML = rows.filter(Boolean).length > 0 ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
+}
 }
 
     function updateProjetosTable() {
