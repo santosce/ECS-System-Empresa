@@ -1,6 +1,6 @@
 // ===== ECS SYSTEM - VERSÃO 3.2.2 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 10/11/25 - 16:50
+// Última atualização: 11/11/25 - 08:30
 // Com Importação de Hr do Kimai
 
 // Importações do Firebase
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.1';
+const APP_VERSION = '3.2.2';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -1318,8 +1318,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         });
     }
 
-// ===== FIM DA PARTE 2 =====
-// ===== PARTE 3 - DASHBOARD, GRÁFICOS E TIMELINE =====
+    // ===== FIM DA PARTE 2 =====
+    // ===== PARTE 3 - DASHBOARD, GRÁFICOS E TIMELINE =====
 
     // ===== DASHBOARD =====
     let updateDashboard = function() {
@@ -1509,7 +1509,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     });
 
     tbody.innerHTML = rows.filter(Boolean).length > 0 ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-}
 }
 
     function updateProjetosTable() {
@@ -2838,6 +2837,7 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     // Inicialização da view inicial
     switchView('dashboard');
+}
 
 // ===== INICIALIZAÇÃO =====
 initializeFirebase();
