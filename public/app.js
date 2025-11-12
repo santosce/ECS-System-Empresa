@@ -1992,7 +1992,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 return alocInicio <= periodoFim && alocFim >= periodoInicio;
             });
 
-            // ✅ CORREÇÃO: Calcular sobreposição real dia a dia
+            // ✅ Calcular sobreposição real dia a dia
             let percentualMaximo = 0;
 
             for (let d = new Date(periodoInicio); d <= periodoFim; d.setDate(d.getDate() + 1)) {
@@ -2015,11 +2015,48 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             const percentualAlocado = Math.min(percentualMaximo, 100);
             const disponibilidade = 100 - percentualAlocado;
 
+            // ✅ NOVO: Calcular próxima disponibilidade
+            let proximaDisponibilidade = '';
+            let proximaDispClass = '';
+            
+            if (disponibilidade === 100) {
+                proximaDisponibilidade = '✓ Disponível agora';
+                proximaDispClass = 'text-green-600 font-semibold';
+            } else if (disponibilidade > 0) {
+                proximaDisponibilidade = `${disponibilidade}% disponível`;
+                proximaDispClass = 'text-yellow-600';
+            } else {
+                // Totalmente alocado - encontrar quando fica disponível
+                const alocacoesAtivas = alocacoes
+                    .filter(a => new Date(a.dataFim + 'T00:00:00') >= periodoInicio)
+                    .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
+                
+                if (alocacoesAtivas.length > 0) {
+                    const ultimaAlocacao = alocacoesAtivas[0];
+                    const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
+                    dataTermino.setDate(dataTermino.getDate() + 1);
+                    
+                    // Verificar se a data de término está dentro do período de busca
+                    if (dataTermino <= periodoFim) {
+                        proximaDisponibilidade = `📅 A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
+                        proximaDispClass = 'text-blue-600';
+                    } else {
+                        proximaDisponibilidade = `📅 Após ${formatDate(ultimaAlocacao.dataFim)}`;
+                        proximaDispClass = 'text-gray-600';
+                    }
+                } else {
+                    proximaDisponibilidade = '⚠️ Verificar alocações';
+                    proximaDispClass = 'text-orange-600';
+                }
+            }
+
             return { 
                 prof, 
                 disponibilidade, 
                 percentualAlocado,
-                totalAlocacoes: alocacoes.length
+                totalAlocacoes: alocacoes.length,
+                proximaDisponibilidade,
+                proximaDispClass
             };
         }).sort((a, b) => b.disponibilidade - a.disponibilidade);
 
@@ -2054,7 +2091,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 const tabelaHTML = `
                     <tbody>
                         ${dadosFiltrados.length === 0 ? `
-                            <tr><td colspan="6" class="text-center py-8 text-gray-500">Nenhum profissional nesta categoria.</td></tr>
+                            <tr><td colspan="7" class="text-center py-8 text-gray-500">Nenhum profissional nesta categoria.</td></tr>
                         ` : dadosFiltrados.map(item => {
                             let statusClass, statusText, statusIcon;
                             
@@ -2086,6 +2123,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                                         <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">
                                             ${statusIcon} ${statusText}
                                         </span>
+                                    </td>
+                                    <td class="px-6 py-4 ${item.proximaDispClass}">
+                                        ${item.proximaDisponibilidade}
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
@@ -2157,6 +2197,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                                 <th class="px-6 py-3">Time</th>
                                 <th class="px-6 py-3">Alocação</th>
                                 <th class="px-6 py-3">Disponibilidade</th>
+                                <th class="px-6 py-3">📅 Próxima Disponibilidade</th>
                                 <th class="px-6 py-3">Nº Alocações</th>
                             </tr>
                         </thead>
