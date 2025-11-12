@@ -1,6 +1,6 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.1 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.4 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 07/11/25 - 12:52
+// Última atualização: 12/11/2025 - 19:30
 // Com Importação de Hr do Kimai
 
 // Importações do Firebase
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.1';
+const APP_VERSION = '3.2.4';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -1380,9 +1380,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         periodoInicio = new Date(filterInicio + 'T00:00:00');
         periodoFim = new Date(filterFim + 'T00:00:00');
     } else {
+        // Primeiro dia do mês atual
         periodoInicio = new Date();
+        periodoInicio.setDate(1);
         periodoInicio.setHours(0, 0, 0, 0);
-        periodoFim = new Date(periodoInicio);
+        
+        // 2 anos no futuro
+        periodoFim = new Date();
+        periodoFim.setFullYear(periodoFim.getFullYear() + 2);
+        periodoFim.setHours(23, 59, 59, 999);
     }
 
     let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
@@ -1398,12 +1404,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
         }
 
-        if (temFiltroPeriodo) {
-            alocacoes = alocacoes.filter(a => {
-                const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-                const alocFim = new Date(a.dataFim + 'T00:00:00');
-                return alocInicio <= periodoFim && alocFim >= periodoInicio;
-            });
+        // ✅ CORREÇÃO: Se filtrou por projeto e não há alocações, não mostrar profissional
+        if (filterProjeto && alocacoes.length === 0) {
+            return null;
         }
 
         const alocacoesNoPeriodo = alocacoes.filter(a => {
@@ -1505,8 +1508,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         `;
     });
 
-    tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
+    tbody.innerHTML = rows.filter(Boolean).length > 0 ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
 }
+
 
     function updateProjetosTable() {
         const tbody = document.getElementById('dashboard-projetos-table');
@@ -1956,6 +1960,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
     document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
 
+    
     // ===== BUSCA DE DISPONIBILIDADE =====
     document.getElementById('search-availability-btn')?.addEventListener('click', () => {
         const startDate = document.getElementById('availability-filter-start')?.value;
@@ -1976,58 +1981,228 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         let profissionais = appState.profissionais.filter(p => p.ativo !== 'Não');
         if (profile) profissionais = profissionais.filter(p => p.perfil === profile);
 
+        const periodoInicio = new Date(startDate + 'T00:00:00');
+        const periodoFim = new Date(endDate + 'T00:00:00');
+
         const disponibilidades = profissionais.map(prof => {
             const alocacoes = appState.alocacoes.filter(a => {
                 if (a.profissionalId !== prof.id) return false;
                 const alocInicio = new Date(a.dataInicio + 'T00:00:00');
                 const alocFim = new Date(a.dataFim + 'T00:00:00');
-                const periodoInicio = new Date(startDate + 'T00:00:00');
-                const periodoFim = new Date(endDate + 'T00:00:00');
                 return alocInicio <= periodoFim && alocFim >= periodoInicio;
             });
 
-            const percentualAlocado = alocacoes.reduce((sum, a) => sum + (parseInt(a.percentual) || 0), 0);
+            // ✅ CORREÇÃO: Calcular sobreposição real dia a dia
+            let percentualMaximo = 0;
+
+            for (let d = new Date(periodoInicio); d <= periodoFim; d.setDate(d.getDate() + 1)) {
+                let percentualDia = 0;
+                
+                alocacoes.forEach(aloc => {
+                    const inicio = new Date(aloc.dataInicio + 'T00:00:00');
+                    const fim = new Date(aloc.dataFim + 'T00:00:00');
+                    
+                    if (d >= inicio && d <= fim) {
+                        percentualDia += parseInt(aloc.percentual) || 0;
+                    }
+                });
+                
+                if (percentualDia > percentualMaximo) {
+                    percentualMaximo = percentualDia;
+                }
+            }
+
+            const percentualAlocado = Math.min(percentualMaximo, 100);
             const disponibilidade = 100 - percentualAlocado;
 
-            return { prof, disponibilidade, percentualAlocado };
-        }).filter(item => item.disponibilidade > 0)
-          .sort((a, b) => b.disponibilidade - a.disponibilidade);
+            return { 
+                prof, 
+                disponibilidade, 
+                percentualAlocado,
+                totalAlocacoes: alocacoes.length
+            };
+        }).sort((a, b) => b.disponibilidade - a.disponibilidade);
 
         if (!resultsDiv) return;
 
         if (disponibilidades.length === 0) {
-            resultsDiv.innerHTML = '<p class="text-gray-600 text-center py-4">Nenhum profissional disponível no período selecionado.</p>';
+            resultsDiv.innerHTML = '<p class="text-gray-600 text-center py-4">Nenhum profissional encontrado.</p>';
         } else {
-            resultsDiv.innerHTML = `
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3">Profissional</th>
-                                <th class="px-6 py-3">Perfil</th>
-                                <th class="px-6 py-3">Time</th>
-                                <th class="px-6 py-3">Disponibilidade</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${disponibilidades.map(item => `
+            // Estatísticas resumidas
+            const totalProfs = disponibilidades.length;
+            const totalmente100 = disponibilidades.filter(d => d.disponibilidade === 100).length;
+            const parcialmente = disponibilidades.filter(d => d.disponibilidade > 0 && d.disponibilidade < 100).length;
+            const totalmente0 = disponibilidades.filter(d => d.disponibilidade === 0).length;
+
+            // Renderizar com filtro padrão "disponíveis"
+            let filtroAtual = 'disponiveis';
+            
+            const renderTabela = (filtro) => {
+                let dadosFiltrados = disponibilidades;
+                
+                if (filtro === 'disponiveis') {
+                    dadosFiltrados = disponibilidades.filter(d => d.disponibilidade > 0);
+                } else if (filtro === 'totalmente-disponiveis') {
+                    dadosFiltrados = disponibilidades.filter(d => d.disponibilidade === 100);
+                } else if (filtro === 'parcialmente') {
+                    dadosFiltrados = disponibilidades.filter(d => d.disponibilidade > 0 && d.disponibilidade < 100);
+                } else if (filtro === 'alocados') {
+                    dadosFiltrados = disponibilidades.filter(d => d.disponibilidade === 0);
+                }
+                // 'todos' mostra tudo sem filtro
+
+                const tabelaHTML = `
+                    <tbody>
+                        ${dadosFiltrados.length === 0 ? `
+                            <tr><td colspan="6" class="text-center py-8 text-gray-500">Nenhum profissional nesta categoria.</td></tr>
+                        ` : dadosFiltrados.map(item => {
+                            let statusClass, statusText, statusIcon;
+                            
+                            if (item.disponibilidade === 100) {
+                                statusClass = 'bg-green-100 text-green-800';
+                                statusText = '100% Disponível';
+                                statusIcon = '✓';
+                            } else if (item.disponibilidade === 0) {
+                                statusClass = 'bg-red-100 text-red-800';
+                                statusText = 'Totalmente Alocado';
+                                statusIcon = '✗';
+                            } else {
+                                statusClass = 'bg-yellow-100 text-yellow-800';
+                                statusText = `${item.disponibilidade}% Disponível`;
+                                statusIcon = '◐';
+                            }
+
+                            const alocacaoText = item.percentualAlocado > 100 
+                                ? `<span class="text-red-600 font-bold" title="Sobre-alocado!">${item.percentualAlocado}% ⚠️</span>`
+                                : `${item.percentualAlocado}%`;
+
+                            return `
                                 <tr class="bg-white border-b hover:bg-gray-50">
                                     <td class="px-6 py-4 font-medium text-gray-900">${item.prof.nome}</td>
                                     <td class="px-6 py-4">${item.prof.perfil}</td>
                                     <td class="px-6 py-4">${item.prof.time}</td>
+                                    <td class="px-6 py-4">${alocacaoText}</td>
                                     <td class="px-6 py-4">
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${item.disponibilidade === 100 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
-                                            ${item.disponibilidade}% disponível
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">
+                                            ${statusIcon} ${statusText}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
+                                            ${item.totalAlocacoes}
                                         </span>
                                     </td>
                                 </tr>
-                            `).join('')}
-                        </tbody>
+                            `;
+                        }).join('')}
+                    </tbody>
+                `;
+
+                document.querySelector('#availability-table-body').innerHTML = tabelaHTML;
+                
+                // Atualizar contador de resultados
+                document.querySelector('#results-count').textContent = `Mostrando ${dadosFiltrados.length} de ${totalProfs} profissionais`;
+            };
+
+            resultsDiv.innerHTML = `
+                <!-- Cards de Estatísticas -->
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors" data-filtro="todos">
+                        <p class="text-sm text-blue-600 font-medium">Total</p>
+                        <p class="text-2xl font-bold text-blue-900">${totalProfs}</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg cursor-pointer hover:bg-green-100 transition-colors" data-filtro="totalmente-disponiveis">
+                        <p class="text-sm text-green-600 font-medium">100% Disponíveis</p>
+                        <p class="text-2xl font-bold text-green-900">${totalmente100}</p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors" data-filtro="parcialmente">
+                        <p class="text-sm text-yellow-600 font-medium">Parcialmente</p>
+                        <p class="text-2xl font-bold text-yellow-900">${parcialmente}</p>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg cursor-pointer hover:bg-red-100 transition-colors" data-filtro="alocados">
+                        <p class="text-sm text-red-600 font-medium">Totalmente Alocados</p>
+                        <p class="text-2xl font-bold text-red-900">${totalmente0}</p>
+                    </div>
+                </div>
+
+                <!-- Botões de Filtro -->
+                <div class="mb-4 flex flex-wrap gap-2 items-center justify-between">
+                    <div class="flex flex-wrap gap-2">
+                        <button class="availability-filter-btn px-4 py-2 rounded-md text-sm font-medium transition-colors bg-indigo-600 text-white" data-filtro="disponiveis">
+                            📊 Disponíveis (${totalmente100 + parcialmente})
+                        </button>
+                        <button class="availability-filter-btn px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" data-filtro="todos">
+                            🔍 Todos (${totalProfs})
+                        </button>
+                        <button class="availability-filter-btn px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" data-filtro="totalmente-disponiveis">
+                            ✓ 100% (${totalmente100})
+                        </button>
+                        <button class="availability-filter-btn px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" data-filtro="parcialmente">
+                            ◐ Parciais (${parcialmente})
+                        </button>
+                        <button class="availability-filter-btn px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" data-filtro="alocados">
+                            ✗ Alocados (${totalmente0})
+                        </button>
+                    </div>
+                    <p id="results-count" class="text-sm text-gray-600"></p>
+                </div>
+
+                <!-- Tabela com Scroll -->
+                <div class="overflow-x-auto max-h-[600px] overflow-y-auto border rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-6 py-3">Profissional</th>
+                                <th class="px-6 py-3">Perfil</th>
+                                <th class="px-6 py-3">Time</th>
+                                <th class="px-6 py-3">Alocação</th>
+                                <th class="px-6 py-3">Disponibilidade</th>
+                                <th class="px-6 py-3">Nº Alocações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="availability-table-body"></tbody>
                     </table>
                 </div>
             `;
+
+            // Event listeners para filtros
+            document.querySelectorAll('.availability-filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const novoFiltro = e.currentTarget.dataset.filtro;
+                    filtroAtual = novoFiltro;
+                    
+                    // Atualizar aparência dos botões
+                    document.querySelectorAll('.availability-filter-btn').forEach(b => {
+                        b.classList.remove('bg-indigo-600', 'text-white');
+                        b.classList.add('bg-white', 'text-gray-700', 'border', 'border-gray-300');
+                    });
+                    e.currentTarget.classList.remove('bg-white', 'text-gray-700', 'border', 'border-gray-300');
+                    e.currentTarget.classList.add('bg-indigo-600', 'text-white');
+                    
+                    renderTabela(novoFiltro);
+                });
+            });
+
+            // Event listeners para cards (clicáveis)
+            document.querySelectorAll('[data-filtro]').forEach(card => {
+                if (!card.classList.contains('availability-filter-btn')) {
+                    card.addEventListener('click', (e) => {
+                        const novoFiltro = e.currentTarget.dataset.filtro;
+                        
+                        // Simular clique no botão correspondente
+                        const btnCorrespondente = document.querySelector(`.availability-filter-btn[data-filtro="${novoFiltro}"]`);
+                        if (btnCorrespondente) {
+                            btnCorrespondente.click();
+                        }
+                    });
+                }
+            });
+
+            // Renderizar tabela inicial (apenas disponíveis)
+            renderTabela('disponiveis');
         }
     });
+   
 
     // ===== TIMELINE =====
 function drawTimelineChart() {
@@ -2834,7 +3009,7 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     // Inicialização da view inicial
     switchView('dashboard');
-}
+}	
 
 // ===== INICIALIZAÇÃO =====
 initializeFirebase();
