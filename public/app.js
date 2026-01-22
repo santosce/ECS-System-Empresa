@@ -1,7 +1,7 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.4 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.5 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 12/11/2025 - 19:30
-// Com Importação de Hr do Kimai
+// Última atualização: 21/01/2026 - 15:02
+// Correção de Bugs e melhorias gerais
 
 // Importações do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -233,6 +233,7 @@ function initializeAppLogic() {
         if (typeof populateAvailabilityChartFilters === 'function') populateAvailabilityChartFilters();
         if (typeof populateProfileFilters === 'function') populateProfileFilters();
         if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        if (typeof populateProfissionaisFilters === 'function') populateProfissionaisFilters();
     });
 
     // Listener para Projetos
@@ -746,6 +747,7 @@ function initializeAppLogic() {
                 document.getElementById('nome').value = data.nome || '';
                 document.getElementById('perfil').value = data.perfil || '';
                 document.getElementById('time').value = data.time || '';
+                document.getElementById('empresa').value = data.empresa || '';
                 document.getElementById('lider').value = data.lider || '';
                 document.getElementById('faturado').value = data.faturado || 'Sim';
                 document.getElementById('senioridade').value = data.senioridade || '';
@@ -817,6 +819,7 @@ function initializeAppLogic() {
             nome: document.getElementById('nome').value,
             perfil: document.getElementById('perfil').value,
             time: document.getElementById('time').value,
+            empresa: document.getElementById('empresa').value,
             lider: document.getElementById('lider').value,
             faturado: document.getElementById('faturado').value,
             senioridade: document.getElementById('senioridade').value,
@@ -895,6 +898,10 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     const resultado = checkProfissionalDisponibilidade(profissionalId, dataInicio, dataFim, percentual, id);
 
     const saveAlocacao = async () => {
+        // ✅ FIX: Salvar filtros ANTES de salvar a alocação
+        const filtroProf = document.getElementById('alocacoes-filter-profissional')?.value || '';
+        const filtroProj = document.getElementById('alocacoes-filter-projeto')?.value || '';
+
         try {
             if (id) {
                 await setDoc(doc(db, getCollectionPath('alocacoes'), id), data);
@@ -904,6 +911,13 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                 showNotification('Alocação adicionada com sucesso!', 'success');
             }
             closeModal();
+            
+            // ✅ FIX: Restaurar filtros APÓS salvar
+            setTimeout(() => {
+                if (filtroProf) document.getElementById('alocacoes-filter-profissional').value = filtroProf;
+                if (filtroProj) document.getElementById('alocacoes-filter-projeto').value = filtroProj;
+                renderAlocacoes(); // Redesenhar com filtros aplicados
+            }, 300);
             
             // ✅ REDESENHAR TIMELINE APÓS SALVAR
             if (isGoogleChartsLoaded && document.querySelector('.view.active')?.id === 'timeline') {
@@ -933,16 +947,25 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         const filterNome = document.getElementById('profissionais-filter-nome')?.value.toLowerCase() || '';
         const filterPerfil = document.getElementById('profissionais-filter-perfil')?.value.toLowerCase() || '';
+        const filterTime = document.getElementById('profissionais-filter-time')?.value.toLowerCase() || '';
+        const filterEmpresa = document.getElementById('profissionais-filter-empresa')?.value.toLowerCase() || '';
+
 
         let filtered = appState.profissionais;
         if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
         if (filterPerfil) filtered = filtered.filter(p => p.perfil.toLowerCase().includes(filterPerfil));
+        if (filterTime) filtered = filtered.filter(p => p.time.toLowerCase().includes(filterTime));
+        if (filterEmpresa) filtered = filtered.filter(p => p.empresa.toLowerCase().includes(filterEmpresa));
 
+        // ✅ ORDENAR ALFABETICAMENTE POR NOME
+        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
+        
         const rows = filtered.map(prof => `
             <tr class="bg-white border-b hover:bg-gray-50">
                 <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
                 <td class="px-6 py-4">${prof.perfil}</td>
                 <td class="px-6 py-4">${prof.time}</td>
+                <td class="px-6 py-4">${prof.empresa}</td>
                 <td class="px-6 py-4">${prof.lider}</td>
                 <td class="px-6 py-4">${prof.faturado}</td>
                 <td class="px-6 py-4">${prof.senioridade || 'N/A'}</td>
@@ -961,7 +984,20 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const tbody = document.getElementById('projetos-table-body');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => `
+        // Filtros
+        const filterNome = document.getElementById('projetos-filter-nome')?.value.toLowerCase() || '';
+        const filterCliente = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
+        const filterStatus = document.getElementById('projetos-filter-status')?.value || '';
+
+        let filtered = appState.projetos;
+        if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
+        if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
+        if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
+        
+        // ✅ ORDENAR ALFABETICAMENTE POR NOME
+        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
+
+        const rows = filtered.map(proj => `
             <tr class="bg-white border-b hover:bg-gray-50">
                 <td class="px-6 py-4 font-medium text-gray-900">${proj.nome}</td>
                 <td class="px-6 py-4">${proj.cliente || 'N/A'}</td>
@@ -1199,10 +1235,19 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 	};
 
     // Event listeners de filtros
-    document.getElementById('profissionais-filter-nome')?.addEventListener('input', debounce(renderProfissionais, 300));
-    document.getElementById('profissionais-filter-perfil')?.addEventListener('input', debounce(renderProfissionais, 300));
+    document.getElementById('projetos-filter-nome')?.addEventListener('input', debounce(renderProjetos, 300));
+    document.getElementById('projetos-filter-cliente')?.addEventListener('input', debounce(renderProjetos, 300));
+    document.getElementById('projetos-filter-tipo')?.addEventListener('change', renderProjetos);
+    document.getElementById('projetos-filter-status')?.addEventListener('change', renderProjetos);
+    
+    document.getElementById('prazos-filter-projeto')?.addEventListener('input', debounce(updatePlannedVsRealizedTable, 300));
+    document.getElementById('prazos-filter-status-inicio')?.addEventListener('change', updatePlannedVsRealizedTable);
+    document.getElementById('prazos-filter-status-fim')?.addEventListener('change', updatePlannedVsRealizedTable);
+    document.getElementById('prazos-filter-status-projeto')?.addEventListener('change', updatePlannedVsRealizedTable);
+    
+    document.getElementById('esforco-filter-projeto')?.addEventListener('input', debounce(updateEffortTable, 300));
+    
     document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
-    document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
 
     // ===== POPULADORES DE FILTROS =====
     
@@ -1250,19 +1295,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
     }
 
-    function populateAlocacoesFilters() {
-        const profSelect = document.getElementById('alocacoes-filter-profissional');
-        const projSelect = document.getElementById('alocacoes-filter-projeto');
-
-        if (profSelect) {
-            profSelect.innerHTML = '<option value="">Todos Profissionais</option>' +
-                appState.profissionais.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (projSelect) {
-            projSelect.innerHTML = '<option value="">Todos Projetos</option>' +
-                appState.projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
+    // ✅ FUNÇÃO NÃO MAIS NECESSÁRIA - Filtros agora são inputs de texto
+    function populateProfissionaisFilters() {
+        // Removido: Time e Empresa agora são campos de texto, não dropdowns
     }
 
     function populateAvailabilityChartFilters() {
@@ -1287,6 +1322,26 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
             profileSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
+        }
+    }
+
+    function populateAlocacoesFilters() {
+        const profSelect = document.getElementById('alocacoes-filter-profissional');
+        const projSelect = document.getElementById('alocacoes-filter-projeto');
+
+        if (profSelect) {
+            const profissionaisAtivos = appState.profissionais
+                .filter(p => p.ativo !== 'Não')
+                .sort((a, b) => a.nome.localeCompare(b.nome));
+
+            profSelect.innerHTML = '<option value="">Todos Profissionais</option>' +
+                profissionaisAtivos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        }
+
+        if (projSelect) {
+            const projetos = appState.projetos.sort((a, b) => a.nome.localeCompare(b.nome));
+            projSelect.innerHTML = '<option value="">Todos Projetos</option>' +
+                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
     }
 
@@ -1570,7 +1625,25 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const tbody = document.getElementById('dashboard-planned-vs-realized-table');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => {
+        // ✅ APLICAR FILTROS
+        const filterProjeto = document.getElementById('prazos-filter-projeto')?.value.toLowerCase() || '';
+        const filterStatusInicio = document.getElementById('prazos-filter-status-inicio')?.value || '';
+        const filterStatusFim = document.getElementById('prazos-filter-status-fim')?.value || '';
+        const filterStatusProjeto = document.getElementById('prazos-filter-status-projeto')?.value || '';
+
+        let filtered = appState.projetos;
+        
+        // Filtro por nome do projeto
+        if (filterProjeto) {
+            filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
+        }
+        
+        // Filtro por status do projeto
+        if (filterStatusProjeto) {
+            filtered = filtered.filter(p => p.status === filterStatusProjeto);
+        }
+
+        const rows = filtered.map(proj => {
             let inicioStatus, inicioStatusColor;
             if (proj.inicioReal) {
                 if (new Date(proj.inicioReal) <= new Date(proj.inicioPrevisto)) {
@@ -1603,6 +1676,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     fimStatusColor = 'bg-blue-100 text-blue-800';
                 }
             }
+             // ✅ APLICAR FILTRO DE STATUS INÍCIO
+            if (filterStatusInicio && inicioStatus !== filterStatusInicio) {
+                return null;
+            }
+            
+            // ✅ APLICAR FILTRO DE STATUS FIM
+            if (filterStatusFim && fimStatus !== filterStatusFim) {
+                return null;
+            }
 
             return `
                 <tr class="bg-white border-b hover:bg-gray-50">
@@ -1623,16 +1705,26 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     </td>
                 </tr>
             `;
-        });
+        }).filter(Boolean); // ✅ REMOVER VALORES NULL DOS FILTROS
 
-        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum projeto cadastrado.</td></tr>';
+        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum projeto encontrado.</td></tr>';
     }
 
     function updateEffortTable() {
         const tbody = document.getElementById('dashboard-effort-table');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => {
+        // ✅ APLICAR FILTRO
+        const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
+
+        let filtered = appState.projetos;
+        
+        // Filtro por nome do projeto
+        if (filterProjeto) {
+            filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
+        }
+
+        const rows = filtered.map(proj => {
             const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
             
             const horasEstimadasProj = proj.horasEstimadasProjeto || 0;
@@ -1791,6 +1883,13 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     const canvas = document.getElementById('monthly-availability-chart');
     if (!canvas) return;
 
+    // ✅ FIX: Verificar se o canvas está visível antes de desenhar
+    const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
+    if (!isVisible) {
+        console.log('⏳ Canvas não visível ainda, agendando redesenho...');
+        setTimeout(updateMonthlyAvailabilityChart, 200);
+        return;
+    }
     const monthSelector = document.getElementById('availability-month-selector');
     const profFilter = document.getElementById('availability-chart-prof-filter')?.value || '';
     const perfilFilter = document.getElementById('availability-chart-perfil-filter')?.value || '';
@@ -1838,12 +1937,22 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     if (monthlyAvailabilityChart) monthlyAvailabilityChart.destroy();
 
-    // ✅ CÁLCULO MELHORADO DA ALTURA
+    // ✅ FIX: Sempre resetar e recalcular altura antes de criar novo gráfico
     const minHeight = 500;
-    const pixelsPorProfissional = 45; // ✅ Altura total do gráfico, se reduzir aumenta
+    const pixelsPorProfissional = 45;
     const alturaCalculada = Math.max(minHeight, profissionais.length * pixelsPorProfissional);
     
+    // ✅ FIX: Limpar estilo anterior e aplicar novo
+    canvas.style.removeProperty('height');
+    canvas.height = alturaCalculada;
     canvas.style.height = `${alturaCalculada}px`;
+
+    // ✅ FIX: Garantir que o container pai não tenha altura fixa
+    const container = canvas.parentElement;
+    if (container) {
+        container.style.removeProperty('height');
+        container.style.height = 'auto';
+    }
 
     monthlyAvailabilityChart = new Chart(canvas, {
         type: 'bar',
@@ -1935,7 +2044,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             monthlyAvailabilityChart.resize();
             monthlyAvailabilityChart.update('none'); // Update sem animação
         }
-    }, 100);
+    }, 150);
 	
 
     // ✅ MENSAGEM SE MUITOS PROFISSIONAIS
@@ -2400,53 +2509,50 @@ function addTodayLineToTimeline(container, alocacoes) {
         return;
     }
 
-    // ✅ ADICIONAR "HOJE" PARA GARANTIR QUE ESTÁ NO RANGE
-    validDates.push(today);
-
     const minDate = new Date(Math.min(...validDates));
     const maxDate = new Date(Math.max(...validDates));
 
-    console.log('📅 Range válido (com hoje):', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
+    // ✅ FIX: Expandir range para incluir margem
+    const totalRangeDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+    const margin = Math.max(30, totalRangeDays * 0.05); // 5% de margem ou mínimo 30 dias
+    
+    minDate.setDate(minDate.getDate() - margin);
+    maxDate.setDate(maxDate.getDate() + margin);
+
+    console.log('📅 Range expandido:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
     console.log('📅 Hoje:', today.toLocaleDateString());
 
-    // ✅ REMOVER VERIFICAÇÃO DE MARGEM - SEMPRE DESENHAR
-    // A linha anterior que verificava se today estava fora do range foi REMOVIDA
-
-    // ✅ ENCONTRAR ÁREA DO GRÁFICO DE FORMA ROBUSTA
-    let chartX, chartY, chartWidth, chartHeight;
-    const allRects = svg.querySelectorAll('rect');
+    // ✅ FIX: Encontrar TODAS as barras do gráfico para calcular área correta
+    const allBars = svg.querySelectorAll('rect[fill]:not([fill="none"]):not([fill="#ffffff"])');
     
-    let maxArea = 0;
-    let chartArea = null;
+    if (allBars.length === 0) {
+        console.warn('⚠️ Nenhuma barra encontrada no gráfico');
+        return;
+    }
 
-    allRects.forEach((rect) => {
-        const width = parseFloat(rect.getAttribute('width') || 0);
-        const height = parseFloat(rect.getAttribute('height') || 0);
-        const area = width * height;
+    // ✅ FIX: Calcular área do gráfico baseada nas barras, não no background
+    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+    
+    allBars.forEach(bar => {
+        const x = parseFloat(bar.getAttribute('x') || 0);
+        const y = parseFloat(bar.getAttribute('y') || 0);
+        const width = parseFloat(bar.getAttribute('width') || 0);
+        const height = parseFloat(bar.getAttribute('height') || 0);
         
-        if (area > maxArea && width > 100 && height > 80 && !isNaN(width) && !isNaN(height)) {
-            maxArea = area;
-            chartArea = rect;
+        if (!isNaN(x) && !isNaN(y) && width > 0 && height > 0) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + width);
+            maxY = Math.max(maxY, y + height);
         }
     });
 
-    if (!chartArea) {
-        console.warn('⚠️ Não foi possível encontrar a área do gráfico');
-        return;
-    }
+    const chartX = minX;
+    const chartY = minY;
+    const chartWidth = maxX - minX;
+    const chartHeight = maxY - minY;
 
-    chartX = parseFloat(chartArea.getAttribute('x'));
-    chartY = parseFloat(chartArea.getAttribute('y'));
-    chartWidth = parseFloat(chartArea.getAttribute('width'));
-    chartHeight = parseFloat(chartArea.getAttribute('height'));
-
-    // ✅ VALIDAR VALORES ANTES DE USAR
-    if (isNaN(chartX) || isNaN(chartY) || isNaN(chartWidth) || isNaN(chartHeight)) {
-        console.error('❌ Valores inválidos da área do gráfico:', {chartX, chartY, chartWidth, chartHeight});
-        return;
-    }
-
-    console.log('🎯 Área do gráfico:', {chartX, chartY, chartWidth, chartHeight});
+    console.log('🎯 Área do gráfico calculada:', {chartX, chartY, chartWidth, chartHeight});
 
     // ✅ CALCULAR POSIÇÃO X COM VALIDAÇÃO
     const totalDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
