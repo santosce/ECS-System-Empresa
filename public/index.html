@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<!-- Versão 3.2.1 -->
-<!-- Inclusão opção Importação Kimai-->
+<!-- Versão 3.2.2 -->
+<!-- Inclusão campo Empresa-->
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -251,9 +251,11 @@
                 <!-- Visão: Profissionais (IGUAL) -->
                 <div id="profissionais" class="view">
                     <div class="bg-white p-6 rounded-lg shadow-sm">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                             <input id="profissionais-filter-nome" type="text" placeholder="Filtrar por nome..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
                             <input id="profissionais-filter-perfil" type="text" placeholder="Filtrar por perfil..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <input id="profissionais-filter-time" type="text" placeholder="Filtrar por time..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <input id="profissionais-filter-empresa" type="text" placeholder="Filtrar por empresa..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm text-left text-gray-500">
@@ -262,6 +264,7 @@
                                         <th class="px-6 py-3">Nome</th>
                                         <th class="px-6 py-3">Perfil</th>
                                         <th class="px-6 py-3">Time</th>
+                                        <th class="px-6 py-3">Empresa</th>
                                         <th class="px-6 py-3">Líder</th>
                                         <th class="px-6 py-3">Faturado</th>
                                         <th class="px-6 py-3">Senioridade</th>
@@ -523,6 +526,10 @@
                 <div>
                     <label for="time" class="block text-sm font-medium text-gray-700">Time</label>
                     <input type="text" id="time" name="time" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
+                    <input type="text" id="empresa" name="empresa" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
                 <div>
                     <label for="lider" class="block text-sm font-medium text-gray-700">Líder</label>
