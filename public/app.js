@@ -986,7 +986,17 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const tbody = document.getElementById('projetos-table-body');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => `
+        // Filtros
+        const filterNome = document.getElementById('projetos-filter-nome')?.value.toLowerCase() || '';
+        const filterCliente = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
+        const filterStatus = document.getElementById('projetos-filter-status')?.value || '';
+
+        let filtered = appState.projetos;
+        if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
+        if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
+        if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
+
+        const rows = filtered.map(proj => `
             <tr class="bg-white border-b hover:bg-gray-50">
                 <td class="px-6 py-4 font-medium text-gray-900">${proj.nome}</td>
                 <td class="px-6 py-4">${proj.cliente || 'N/A'}</td>
@@ -1230,6 +1240,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     document.getElementById('profissionais-filter-empresa')?.addEventListener('input', debounce(renderProfissionais, 300));
     document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
     document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
+    document.getElementById('projetos-filter-nome')?.addEventListener('input', debounce(renderProjetos, 300));
+    document.getElementById('projetos-filter-cliente')?.addEventListener('input', debounce(renderProjetos, 300));
+    document.getElementById('projetos-filter-status')?.addEventListener('change', renderProjetos);
 
     // ===== POPULADORES DE FILTROS =====
     
@@ -1304,6 +1317,26 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
             profileSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
+        }
+    }
+
+    function populateAlocacoesFilters() {
+        const profSelect = document.getElementById('alocacoes-filter-profissional');
+        const projSelect = document.getElementById('alocacoes-filter-projeto');
+
+        if (profSelect) {
+            const profissionaisAtivos = appState.profissionais
+                .filter(p => p.ativo !== 'Não')
+                .sort((a, b) => a.nome.localeCompare(b.nome));
+
+            profSelect.innerHTML = '<option value="">Todos Profissionais</option>' +
+                profissionaisAtivos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        }
+
+        if (projSelect) {
+            const projetos = appState.projetos.sort((a, b) => a.nome.localeCompare(b.nome));
+            projSelect.innerHTML = '<option value="">Todos Projetos</option>' +
+                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
     }
 
