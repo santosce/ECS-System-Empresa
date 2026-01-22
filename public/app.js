@@ -1,6 +1,6 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.5 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.6 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 21/01/2026 - 15:02
+// Última atualização: 22/01/2026
 // Correção de Bugs e melhorias gerais
 
 // Importações do Firebase
@@ -1235,6 +1235,11 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 	};
 
     // Event listeners de filtros
+    document.getElementById('profissionais-filter-nome')?.addEventListener('input', debounce(renderProfissionais, 300));
+    document.getElementById('profissionais-filter-perfil')?.addEventListener('input', debounce(renderProfissionais, 300));
+    document.getElementById('profissionais-filter-time')?.addEventListener('input', debounce(renderProfissionais, 300));
+    document.getElementById('profissionais-filter-empresa')?.addEventListener('input', debounce(renderProfissionais, 300));
+
     document.getElementById('projetos-filter-nome')?.addEventListener('input', debounce(renderProjetos, 300));
     document.getElementById('projetos-filter-cliente')?.addEventListener('input', debounce(renderProjetos, 300));
     document.getElementById('projetos-filter-tipo')?.addEventListener('change', renderProjetos);
@@ -1248,6 +1253,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     document.getElementById('esforco-filter-projeto')?.addEventListener('input', debounce(updateEffortTable, 300));
     
     document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
+    document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
 
     // ===== POPULADORES DE FILTROS =====
     
@@ -1273,8 +1279,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         const projetoSelect = document.getElementById('dashboard-filter-projeto');
         if (projetoSelect) {
-            projetoSelect.innerHTML = '<option value="">Todos Projetos</option>' + 
-                appState.projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+            const projetos = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
+            projetoSelect.innerHTML = '<option value="">Todos Projetos</option>' +
+                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         const statusContainer = document.getElementById('project-dashboard-filter-status');
@@ -1305,8 +1312,11 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const perfilSelect = document.getElementById('availability-chart-perfil-filter');
 
         if (profSelect) {
+            const profissionaisAtivos = appState.profissionais
+                .filter(p => p.ativo !== 'Não')
+                .sort((a, b) => a.nome.localeCompare(b.nome));
             profSelect.innerHTML = '<option value="">Todos</option>' +
-                appState.profissionais.filter(p => p.ativo !== 'Não').map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                profissionaisAtivos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         if (perfilSelect) {
@@ -1351,13 +1361,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const perfilSelect = document.getElementById('timeline-filter-perfil');
 
         if (profSelect) {
+            const profissionaisOrdenados = [...appState.profissionais].sort((a, b) => a.nome.localeCompare(b.nome));
             profSelect.innerHTML = '<option value="">Todos</option>' +
-                appState.profissionais.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                profissionaisOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         if (projSelect) {
+            const projetosOrdenados = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
             projSelect.innerHTML = '<option value="">Todos</option>' +
-                appState.projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                projetosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         if (perfilSelect) {
@@ -2497,12 +2509,15 @@ function addTodayLineToTimeline(container, alocacoes) {
         oldLine.remove();
     }
 
-    // ✅ VALIDAR DATAS ANTES DE CALCULAR
+    // ✅ VALIDAR DATAS ANTES DE CALCULAR - INCLUINDO HOJE
     const validDates = alocacoes
         .flatMap(a => [a.dataInicio, a.dataFim])
         .filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/))
         .map(d => new Date(d + 'T00:00:00'))
         .filter(d => !isNaN(d.getTime()));
+
+    // ✅ FIX: Incluir "hoje" no range (mesma lógica do Google Charts)
+    validDates.push(today);
 
     if (validDates.length === 0) {
         console.warn('⚠️ Nenhuma data válida encontrada nas alocações');
@@ -2512,14 +2527,7 @@ function addTodayLineToTimeline(container, alocacoes) {
     const minDate = new Date(Math.min(...validDates));
     const maxDate = new Date(Math.max(...validDates));
 
-    // ✅ FIX: Expandir range para incluir margem
-    const totalRangeDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
-    const margin = Math.max(30, totalRangeDays * 0.05); // 5% de margem ou mínimo 30 dias
-    
-    minDate.setDate(minDate.getDate() - margin);
-    maxDate.setDate(maxDate.getDate() + margin);
-
-    console.log('📅 Range expandido:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
+    console.log('📅 Range real:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
     console.log('📅 Hoje:', today.toLocaleDateString());
 
     // ✅ FIX: Encontrar TODAS as barras do gráfico para calcular área correta
