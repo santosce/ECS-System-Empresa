@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.4';
+const APP_VERSION = '3.2.6';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -2497,89 +2497,117 @@ function addTodayLineToTimeline(container, alocacoes) {
         return;
     }
 
-    console.log('✅ SVG encontrado, adicionando linha "Hoje"');
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // Remover linha antiga se existir
     const oldLine = svg.querySelector('.today-line');
-    if (oldLine) {
-        console.log('🗑️ Removendo linha antiga');
-        oldLine.remove();
+    if (oldLine) oldLine.remove();
+
+    // ✅ ESTRATÉGIA: Usar labels do eixo X para calcular escala precisa
+    const textElements = svg.querySelectorAll('text');
+    const monthMap = { 'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
+                       'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11 };
+
+    // Coletar labels de mês e ano
+    const axisLabels = [];
+    let lastYear = new Date().getFullYear();
+
+    textElements.forEach(text => {
+        const content = text.textContent.trim();
+        const x = parseFloat(text.getAttribute('x'));
+        if (isNaN(x)) return;
+
+        // Verificar se é um ano (ex: "2025", "2026")
+        if (/^\d{4}$/.test(content)) {
+            lastYear = parseInt(content);
+            axisLabels.push({ x, type: 'year', year: lastYear });
+        }
+
+        // Verificar se é um mês (ex: "jan.", "fev.")
+        const monthKey = content.toLowerCase().replace('.', '').substring(0, 3);
+        if (monthMap.hasOwnProperty(monthKey)) {
+            axisLabels.push({ x, type: 'month', month: monthMap[monthKey], text: content });
+        }
+    });
+
+    // Ordenar por posição X
+    axisLabels.sort((a, b) => a.x - b.x);
+
+    // Associar anos aos meses (cada mês herda o último ano visto)
+    let currentYear = 2025; // default
+    axisLabels.forEach(label => {
+        if (label.type === 'year') {
+            currentYear = label.year;
+        } else if (label.type === 'month') {
+            label.year = currentYear;
+            // Se já passamos de dezembro e voltamos pra janeiro, incrementa o ano
+            const prevMonth = axisLabels.filter(l => l.type === 'month' && l.x < label.x).pop();
+            if (prevMonth && prevMonth.month > label.month) {
+                label.year = prevMonth.year + 1;
+                currentYear = label.year;
+            }
+        }
+    });
+
+    const monthLabels = axisLabels.filter(l => l.type === 'month' && l.year);
+    console.log('📅 Labels de mês com ano:', monthLabels.map(l => `${l.text}/${l.year} @${l.x.toFixed(0)}`));
+
+    // ✅ Calcular escala usando dois labels de mês consecutivos
+    let pixelsPerDay = null;
+    let refLabel = null;
+
+    for (let i = 0; i < monthLabels.length - 1; i++) {
+        const l1 = monthLabels[i];
+        const l2 = monthLabels[i + 1];
+
+        const date1 = new Date(l1.year, l1.month, 1);
+        const date2 = new Date(l2.year, l2.month, 1);
+        const daysBetween = (date2 - date1) / (1000 * 60 * 60 * 24);
+        const pixelsBetween = l2.x - l1.x;
+
+        if (daysBetween > 0 && pixelsBetween > 0) {
+            pixelsPerDay = pixelsBetween / daysBetween;
+            refLabel = l1;
+            console.log(`📐 Escala: ${pixelsBetween.toFixed(0)}px / ${daysBetween} dias = ${pixelsPerDay.toFixed(2)} px/dia`);
+            break;
+        }
     }
 
-    // ✅ VALIDAR DATAS ANTES DE CALCULAR - INCLUINDO HOJE
-    const validDates = alocacoes
-        .flatMap(a => [a.dataInicio, a.dataFim])
-        .filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/))
-        .map(d => new Date(d + 'T00:00:00'))
-        .filter(d => !isNaN(d.getTime()));
-
-    // ✅ FIX: Incluir "hoje" no range (mesma lógica do Google Charts)
-    validDates.push(today);
-
-    if (validDates.length === 0) {
-        console.warn('⚠️ Nenhuma data válida encontrada nas alocações');
+    if (!pixelsPerDay || !refLabel) {
+        console.warn('⚠️ Não foi possível calcular escala precisa');
         return;
     }
 
-    const minDate = new Date(Math.min(...validDates));
-    const maxDate = new Date(Math.max(...validDates));
+    // ✅ Calcular posição de "hoje"
+    const refDate = new Date(refLabel.year, refLabel.month, 1);
+    const daysFromRef = (today - refDate) / (1000 * 60 * 60 * 24);
+    const xPosition = refLabel.x + (daysFromRef * pixelsPerDay);
 
-    console.log('📅 Range real:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
+    console.log('📅 Referência:', refDate.toLocaleDateString(), '@ x =', refLabel.x.toFixed(0));
     console.log('📅 Hoje:', today.toLocaleDateString());
+    console.log('📅 Dias desde ref:', daysFromRef.toFixed(0));
+    console.log(`📍 Posição calculada: x = ${xPosition.toFixed(0)}`);
 
-    // ✅ FIX: Encontrar TODAS as barras do gráfico para calcular área correta
-    const allBars = svg.querySelectorAll('rect[fill]:not([fill="none"]):not([fill="#ffffff"])');
-    
-    if (allBars.length === 0) {
-        console.warn('⚠️ Nenhuma barra encontrada no gráfico');
-        return;
-    }
+    // ✅ Calcular área Y do gráfico pelas barras
+    const allBars = svg.querySelectorAll('rect');
+    let minY = Infinity, maxY = 0;
 
-    // ✅ FIX: Calcular área do gráfico baseada nas barras, não no background
-    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
-    
     allBars.forEach(bar => {
-        const x = parseFloat(bar.getAttribute('x') || 0);
-        const y = parseFloat(bar.getAttribute('y') || 0);
-        const width = parseFloat(bar.getAttribute('width') || 0);
+        const fill = bar.getAttribute('fill');
         const height = parseFloat(bar.getAttribute('height') || 0);
-        
-        if (!isNaN(x) && !isNaN(y) && width > 0 && height > 0) {
-            minX = Math.min(minX, x);
+        const y = parseFloat(bar.getAttribute('y') || 0);
+        // Barras de dados têm altura entre 15 e 50px geralmente
+        if (fill && fill !== 'none' && fill !== '#ffffff' && fill !== 'white' && height > 10 && height < 60) {
             minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x + width);
             maxY = Math.max(maxY, y + height);
         }
     });
 
-    const chartX = minX;
+    if (minY === Infinity) { minY = 50; maxY = 400; }
+
     const chartY = minY;
-    const chartWidth = maxX - minX;
     const chartHeight = maxY - minY;
-
-    console.log('🎯 Área do gráfico calculada:', {chartX, chartY, chartWidth, chartHeight});
-
-    // ✅ CALCULAR POSIÇÃO X COM VALIDAÇÃO
-    const totalDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
-    const daysFromStart = (today - minDate) / (1000 * 60 * 60 * 24);
-    
-    if (totalDays <= 0 || isNaN(totalDays)) {
-        console.error('❌ Total de dias inválido:', totalDays);
-        return;
-    }
-
-    const ratio = daysFromStart / totalDays;
-    const xPosition = chartX + (ratio * chartWidth);
-
-    if (isNaN(xPosition)) {
-        console.error('❌ Posição X calculada é NaN:', {daysFromStart, totalDays, ratio, chartX, chartWidth});
-        return;
-    }
-
-    console.log(`📍 Linha "Hoje" em: x=${Math.round(xPosition)} (${Math.round(ratio * 100)}% do range)`);
 
     // ✅ CRIAR ELEMENTOS SVG COM VALIDAÇÃO
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
