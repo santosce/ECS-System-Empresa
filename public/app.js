@@ -951,8 +951,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterEmpresa = document.getElementById('profissionais-filter-empresa')?.value.toLowerCase() || '';
 
 
-
-
         let filtered = appState.profissionais;
         if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
         if (filterPerfil) filtered = filtered.filter(p => p.perfil.toLowerCase().includes(filterPerfil));
@@ -995,6 +993,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
         if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
         if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
+        
+        // ✅ ORDENAR ALFABETICAMENTE POR NOME
+        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
 
         const rows = filtered.map(proj => `
             <tr class="bg-white border-b hover:bg-gray-50">
