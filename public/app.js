@@ -1235,15 +1235,19 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 	};
 
     // Event listeners de filtros
-    document.getElementById('profissionais-filter-nome')?.addEventListener('input', debounce(renderProfissionais, 300));
-    document.getElementById('profissionais-filter-perfil')?.addEventListener('input', debounce(renderProfissionais, 300));
-    document.getElementById('profissionais-filter-time')?.addEventListener('input', debounce(renderProfissionais, 300));
-    document.getElementById('profissionais-filter-empresa')?.addEventListener('input', debounce(renderProfissionais, 300));
-    document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
-    document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
     document.getElementById('projetos-filter-nome')?.addEventListener('input', debounce(renderProjetos, 300));
     document.getElementById('projetos-filter-cliente')?.addEventListener('input', debounce(renderProjetos, 300));
+    document.getElementById('projetos-filter-tipo')?.addEventListener('change', renderProjetos);
     document.getElementById('projetos-filter-status')?.addEventListener('change', renderProjetos);
+    
+    document.getElementById('prazos-filter-projeto')?.addEventListener('input', debounce(updatePlannedVsRealizedTable, 300));
+    document.getElementById('prazos-filter-status-inicio')?.addEventListener('change', updatePlannedVsRealizedTable);
+    document.getElementById('prazos-filter-status-fim')?.addEventListener('change', updatePlannedVsRealizedTable);
+    document.getElementById('prazos-filter-status-projeto')?.addEventListener('change', updatePlannedVsRealizedTable);
+    
+    document.getElementById('esforco-filter-projeto')?.addEventListener('input', debounce(updateEffortTable, 300));
+    
+    document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
 
     // ===== POPULADORES DE FILTROS =====
     
@@ -1621,7 +1625,25 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const tbody = document.getElementById('dashboard-planned-vs-realized-table');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => {
+        // ✅ APLICAR FILTROS
+        const filterProjeto = document.getElementById('prazos-filter-projeto')?.value.toLowerCase() || '';
+        const filterStatusInicio = document.getElementById('prazos-filter-status-inicio')?.value || '';
+        const filterStatusFim = document.getElementById('prazos-filter-status-fim')?.value || '';
+        const filterStatusProjeto = document.getElementById('prazos-filter-status-projeto')?.value || '';
+
+        let filtered = appState.projetos;
+        
+        // Filtro por nome do projeto
+        if (filterProjeto) {
+            filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
+        }
+        
+        // Filtro por status do projeto
+        if (filterStatusProjeto) {
+            filtered = filtered.filter(p => p.status === filterStatusProjeto);
+        }
+
+        const rows = filtered.map(proj => {
             let inicioStatus, inicioStatusColor;
             if (proj.inicioReal) {
                 if (new Date(proj.inicioReal) <= new Date(proj.inicioPrevisto)) {
@@ -1654,6 +1676,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     fimStatusColor = 'bg-blue-100 text-blue-800';
                 }
             }
+             // ✅ APLICAR FILTRO DE STATUS INÍCIO
+            if (filterStatusInicio && inicioStatus !== filterStatusInicio) {
+                return null;
+            }
+            
+            // ✅ APLICAR FILTRO DE STATUS FIM
+            if (filterStatusFim && fimStatus !== filterStatusFim) {
+                return null;
+            }
 
             return `
                 <tr class="bg-white border-b hover:bg-gray-50">
@@ -1674,16 +1705,26 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                     </td>
                 </tr>
             `;
-        });
+        }).filter(Boolean); // ✅ REMOVER VALORES NULL DOS FILTROS
 
-        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum projeto cadastrado.</td></tr>';
+        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum projeto encontrado.</td></tr>';
     }
 
     function updateEffortTable() {
         const tbody = document.getElementById('dashboard-effort-table');
         if (!tbody) return;
 
-        const rows = appState.projetos.map(proj => {
+        // ✅ APLICAR FILTRO
+        const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
+
+        let filtered = appState.projetos;
+        
+        // Filtro por nome do projeto
+        if (filterProjeto) {
+            filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
+        }
+
+        const rows = filtered.map(proj => {
             const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
             
             const horasEstimadasProj = proj.horasEstimadasProjeto || 0;
