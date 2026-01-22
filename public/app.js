@@ -2509,12 +2509,15 @@ function addTodayLineToTimeline(container, alocacoes) {
         oldLine.remove();
     }
 
-    // ✅ VALIDAR DATAS ANTES DE CALCULAR
+    // ✅ VALIDAR DATAS ANTES DE CALCULAR - INCLUINDO HOJE
     const validDates = alocacoes
         .flatMap(a => [a.dataInicio, a.dataFim])
         .filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/))
         .map(d => new Date(d + 'T00:00:00'))
         .filter(d => !isNaN(d.getTime()));
+
+    // ✅ FIX: Incluir "hoje" no range (mesma lógica do Google Charts)
+    validDates.push(today);
 
     if (validDates.length === 0) {
         console.warn('⚠️ Nenhuma data válida encontrada nas alocações');
@@ -2524,14 +2527,7 @@ function addTodayLineToTimeline(container, alocacoes) {
     const minDate = new Date(Math.min(...validDates));
     const maxDate = new Date(Math.max(...validDates));
 
-    // ✅ FIX: Expandir range para incluir margem
-    const totalRangeDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
-    const margin = Math.max(30, totalRangeDays * 0.05); // 5% de margem ou mínimo 30 dias
-    
-    minDate.setDate(minDate.getDate() - margin);
-    maxDate.setDate(maxDate.getDate() + margin);
-
-    console.log('📅 Range expandido:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
+    console.log('📅 Range real:', minDate.toLocaleDateString(), 'até', maxDate.toLocaleDateString());
     console.log('📅 Hoje:', today.toLocaleDateString());
 
     // ✅ FIX: Encontrar TODAS as barras do gráfico para calcular área correta
