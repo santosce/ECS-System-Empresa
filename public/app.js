@@ -1,6 +1,6 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.6 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.7 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 22/01/2026
+// Última atualização: 23/01/2026
 // Correção de Bugs e melhorias gerais
 
 // Importações do Firebase
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.6';
+const APP_VERSION = '3.2.7';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -1361,9 +1361,12 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const perfilSelect = document.getElementById('timeline-filter-perfil');
 
         if (profSelect) {
-            const profissionaisOrdenados = [...appState.profissionais].sort((a, b) => a.nome.localeCompare(b.nome));
+            // ✅ Filtrar apenas profissionais ATIVOS e ordenar alfabeticamente
+            const profissionaisAtivosOrdenados = [...appState.profissionais]
+                .filter(p => p.ativo !== 'Não' && p.nome) // Apenas ativos com nome válido
+                .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
             profSelect.innerHTML = '<option value="">Todos</option>' +
-                profissionaisOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                profissionaisAtivosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         if (projSelect) {
@@ -1373,7 +1376,12 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         if (perfilSelect) {
-            const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
+            // ✅ Filtrar perfis apenas de profissionais ATIVOS
+            const perfis = [...new Set(appState.profissionais
+                .filter(p => p.ativo !== 'Não')
+                .map(p => p.perfil)
+                .filter(pf => pf) // Remover undefined/null
+            )].sort();
             perfilSelect.innerHTML = '<option value="">Todos</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
         }
@@ -2376,15 +2384,27 @@ function drawTimelineChart() {
     const filterPerfil = document.getElementById('timeline-filter-perfil')?.value || '';
 
     let alocacoes = appState.alocacoes.filter(a => {
+        // ✅ Buscar profissional para validações
+        const prof = appState.profissionais.find(p => p.id === a.profissionalId);
+
+        // ✅ FILTRO 1: Apenas profissionais ATIVOS e com nome válido
+        if (!prof || prof.ativo === 'Não' || !prof.nome) return false;
+
         if (filterProf && a.profissionalId !== filterProf) return false;
         if (filterProj && a.projetoId !== filterProj) return false;
-        
+
         if (filterPerfil) {
-            const prof = appState.profissionais.find(p => p.id === a.profissionalId);
-            if (!prof || prof.perfil !== filterPerfil) return false;
+            if (prof.perfil !== filterPerfil) return false;
         }
-        
+
         return true;
+    });
+
+    // ✅ ORDENAR alocações por nome do profissional (alfabeticamente)
+    alocacoes.sort((a, b) => {
+        const profA = appState.profissionais.find(p => p.id === a.profissionalId);
+        const profB = appState.profissionais.find(p => p.id === b.profissionalId);
+        return (profA?.nome || '').localeCompare(profB?.nome || '');
     });
 
     if (alocacoes.length === 0) {
@@ -2406,13 +2426,15 @@ function drawTimelineChart() {
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
 
+    // ✅ Linha invisível com caractere zero-width space (invisível)
+    const invisibleChar = '\u200B'; // Zero-Width Space - caractere Unicode invisível
     dataTable.addRow([
-        '', // Resource vazio
-        '', // Name vazio
+        invisibleChar, // Resource invisível
+        invisibleChar, // Name invisível
         '', // Tooltip vazio
         today, // Start = hoje
         todayEnd, // End = hoje (mesmo dia)
-        'opacity: 0' // ✅ INVISÍVEL - esta é a mágica!
+        'opacity: 0; height: 0;' // ✅ INVISÍVEL
     ]);
 
     console.log('📅 Linha invisível adicionada para forçar "hoje" no range:', today.toLocaleDateString());
@@ -2421,8 +2443,10 @@ function drawTimelineChart() {
     alocacoes.forEach(aloc => {
         const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
         const proj = appState.projetos.find(p => p.id === aloc.projetoId);
-        
+
+        // ✅ Validar profissional, projeto e nomes (evitar "undefined")
         if (!prof || !proj) return;
+        if (!prof.nome || !proj.nome) return;
 
         const profNome = prof.nome;
         const projNome = proj.nome;
@@ -2481,6 +2505,37 @@ function drawTimelineChart() {
     });
 
     chart.draw(dataTable, options);
+
+    // ✅ OCULTAR LINHA "undefined" após renderização
+    function hideUndefinedLabel() {
+        const svg = container.querySelector('svg');
+        if (!svg) return;
+
+        const textElements = svg.querySelectorAll('text');
+        textElements.forEach(text => {
+            const content = text.textContent?.trim();
+            if (content === 'undefined' || content === '' || !content) {
+                // Ocultar o texto "undefined" ou vazio
+                text.textContent = '';
+                text.style.visibility = 'hidden';
+            }
+        });
+
+        // ✅ Também ocultar a primeira linha da tabela se for a invisível
+        const rows = svg.querySelectorAll('g > rect');
+        if (rows.length > 0) {
+            const firstRowRect = rows[0];
+            if (firstRowRect && firstRowRect.getAttribute('fill') === 'none') {
+                firstRowRect.style.display = 'none';
+            }
+        }
+
+        console.log('✅ Label "undefined" ocultado do gráfico');
+    }
+
+    setTimeout(hideUndefinedLabel, 100);
+    setTimeout(hideUndefinedLabel, 300);
+    setTimeout(hideUndefinedLabel, 600);
 
     // ✅ SEMPRE ADICIONAR LINHA "HOJE"
     console.log('⏳ Aguardando renderização do gráfico...');
