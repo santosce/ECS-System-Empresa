@@ -1,7 +1,7 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.7 =====
+// ===== ECS SYSTEM - VERSÃO 3.2.8 =====
 // Sistema de Gestão de Capacity
-// Última atualização: 23/01/2026
-// Correção de Bugs e melhorias gerais
+// Última atualização: 28/01/26
+// Correção Importacao Kimai
 
 // Importações do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.7';
+const APP_VERSION = '3.2.8';
 const APP_NAME = 'ECS System';
 let app;
 let db;
@@ -2940,6 +2940,10 @@ function addTodayLineToTimeline(container, alocacoes) {
 
         console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
 
+        // ✅ LOG DE DEBUG: Mostrar projetos e profissionais disponíveis no sistema
+        console.log('📋 Projetos no sistema:', appState.projetos.map(p => p.nome));
+        console.log('📋 Profissionais no sistema:', appState.profissionais.map(p => p.nome));
+
         // ✅ LOG DE DEBUG: Mostrar totais
         for (const [key, dados] of registrosPorAlocacao.entries()) {
             console.log(`👤 ${key}: ${dados.totalHoras.toFixed(2)}h (${dados.registrosPorData.size} dias)`);
@@ -2948,15 +2952,31 @@ function addTodayLineToTimeline(container, alocacoes) {
         // Atualizar alocações no Firestore
         for (const [key, dadosNovos] of registrosPorAlocacao.entries()) {
             const { nomeUsuario, nomeProjeto, registrosPorData, totalHoras } = dadosNovos;
+
+            console.log(`🔍 Buscando: Profissional="${nomeUsuario}" | Projeto="${nomeProjeto}"`);
             
             result.processed++;
 
             try {
-                // Encontrar profissional
-                const profissional = appState.profissionais.find(p => 
-                    p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
-                    nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
+                // Encontrar profissional - priorizar match exato, depois match mais específico
+                let profissional = appState.profissionais.find(p =>
+                    p.nome.toLowerCase().trim() === nomeUsuario.toLowerCase().trim()
                 );
+
+                // Se não encontrou match exato, buscar match parcial preferindo o mais específico
+                if (!profissional) {
+                    const profissionaisMatch = appState.profissionais.filter(p =>
+                        p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
+                        nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
+                    );
+
+                    if (profissionaisMatch.length > 1) {
+                        profissional = profissionaisMatch.sort((a, b) => b.nome.length - a.nome.length)[0];
+                        console.log(`⚠️ Múltiplos profissionais encontrados para "${nomeUsuario}", usando o mais específico: "${profissional.nome}"`);
+                    } else if (profissionaisMatch.length === 1) {
+                        profissional = profissionaisMatch[0];
+                    }
+                }
 
                 if (!profissional) {
                     result.skipped++;
@@ -2965,11 +2985,26 @@ function addTodayLineToTimeline(container, alocacoes) {
                     continue;
                 }
 
-                // Encontrar projeto
-                const projeto = appState.projetos.find(p => 
-                    p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
-                    nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
+                // Encontrar projeto - priorizar match exato, depois match mais específico
+                let projeto = appState.projetos.find(p =>
+                    p.nome.toLowerCase().trim() === nomeProjeto.toLowerCase().trim()
                 );
+
+                // Se não encontrou match exato, buscar match parcial preferindo o mais específico
+                if (!projeto) {
+                    const projetosMatch = appState.projetos.filter(p =>
+                        p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
+                        nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
+                    );
+
+                    // Se houver múltiplos matches, escolher o mais específico (nome mais longo que ainda faz match)
+                    if (projetosMatch.length > 1) {
+                        projeto = projetosMatch.sort((a, b) => b.nome.length - a.nome.length)[0];
+                        console.log(`⚠️ Múltiplos projetos encontrados para "${nomeProjeto}", usando o mais específico: "${projeto.nome}"`);
+                    } else if (projetosMatch.length === 1) {
+                        projeto = projetosMatch[0];
+                    }
+                }
 
                 if (!projeto) {
                     result.skipped++;
@@ -3223,13 +3258,38 @@ function addTodayLineToTimeline(container, alocacoes) {
         }
 
         if (result.errors.length > 0) {
+            const maxVisivel = 10;
+            const temMais = result.errors.length > maxVisivel;
+
             html += `
                 <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg mt-6">
                     <h4 class="font-semibold text-yellow-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
-                    <ul class="list-disc list-inside text-sm text-yellow-700 space-y-1">
-                        ${result.errors.slice(0, 5).map(err => `<li>${err}</li>`).join('')}
-                        ${result.errors.length > 5 ? `<li class="font-semibold">... e mais ${result.errors.length - 5} avisos</li>` : ''}
+                    <ul id="import-errors-list" class="list-disc list-inside text-sm text-yellow-700 space-y-1 ${temMais ? 'max-h-64 overflow-y-auto' : ''}">
+                        ${result.errors.slice(0, maxVisivel).map(err => `<li>${err}</li>`).join('')}
                     </ul>
+                    ${temMais ? `
+                        <div id="import-errors-hidden" class="hidden">
+                            <ul class="list-disc list-inside text-sm text-yellow-700 space-y-1 max-h-96 overflow-y-auto">
+                                ${result.errors.map(err => `<li>${err}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <button id="toggle-errors-btn" onclick="
+                            const lista = document.getElementById('import-errors-list');
+                            const hidden = document.getElementById('import-errors-hidden');
+                            const btn = document.getElementById('toggle-errors-btn');
+                            if (hidden.classList.contains('hidden')) {
+                                lista.classList.add('hidden');
+                                hidden.classList.remove('hidden');
+                                btn.textContent = '▲ Mostrar menos';
+                            } else {
+                                lista.classList.remove('hidden');
+                                hidden.classList.add('hidden');
+                                btn.textContent = '▼ Ver todos os ${result.errors.length} avisos';
+                            }
+                        " class="mt-3 text-sm text-yellow-800 hover:text-yellow-900 font-semibold underline cursor-pointer">
+                            ▼ Ver todos os ${result.errors.length} avisos
+                        </button>
+                    ` : ''}
                 </div>
             `;
         }
