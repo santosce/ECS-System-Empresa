@@ -2,7 +2,6 @@
 REM ========================================
 REM Script: Commit Rápido
 REM ========================================
-
 echo.
 echo ========================================
 echo   SALVANDO ALTERACOES (COMMIT)
@@ -17,7 +16,6 @@ echo.
 
 REM Pedir mensagem do commit
 set /p COMMIT_MSG="Digite a mensagem do commit: "
-
 if "%COMMIT_MSG%"=="" (
     echo [ERRO] Mensagem do commit nao pode ser vazia!
     pause
@@ -26,7 +24,10 @@ if "%COMMIT_MSG%"=="" (
 
 echo.
 echo [1/3] Adicionando arquivos...
-git add .
+git add -A
+REM Remover referências ao dispositivo 'nul' do Windows
+git reset -- nul 2>nul
+git reset -- */nul 2>nul
 if errorlevel 1 (
     echo [ERRO] Falha ao adicionar arquivos!
     pause
