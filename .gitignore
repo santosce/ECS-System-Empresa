@@ -101,3 +101,9 @@ $RECYCLE.BIN/
 # Uploads de usuarios (se aplicavel)
 # uploads/
 # public/uploads/
+
+
+# Ignorar dispositivo nul do Windows
+nul
+*/nul
+**/nul
