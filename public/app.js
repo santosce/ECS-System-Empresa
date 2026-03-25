@@ -30,6 +30,15 @@ import appState, {
     getProjetoById,
     getAlocacaoById
 } from './js/state/app-state.js';
+import {
+    APP_VERSION,
+    APP_NAME,
+    debounce,
+    formatDate,
+    getStatusColor,
+    getCollectionPath,
+    showNotification
+} from './js/core/utils.js';
 
 
 
@@ -39,8 +48,7 @@ import appState, {
 
 // ===== VARIÁVEIS GLOBAIS =====
 
-const APP_VERSION = '4.0.0';
-const APP_NAME = 'ECS System';
+
 // Variáveis Firebase agora vêm do módulo firebase-config
 // Usar getters: getDb(), getAuthInstance(), getProvider(), getAppId()
 
@@ -48,67 +56,7 @@ const APP_NAME = 'ECS System';
 
 let openedFromTimeline = false;
 
-// ===== FUNÇÃO PARA DEBOUNCE =====
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), delay);
-    };
-}
 
-// ===== FUNÇÃO GLOBAL PARA NOTIFICAÇÕES =====
-window.showNotification = function(message, type = 'info') {
-    if (typeof Toastify === 'undefined') {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        return;
-    }
-
-    const config = {
-        success: {
-            background: 'linear-gradient(to right, #00b09b, #96c93d)',
-            icon: '✓',
-            duration: 3000
-        },
-        error: {
-            background: 'linear-gradient(to right, #ff5f6d, #ffc371)',
-            icon: '✕',
-            duration: 4000
-        },
-        warning: {
-            background: 'linear-gradient(to right, #f7971e, #ffd200)',
-            icon: '⚠',
-            duration: 3500
-        },
-        info: {
-            background: 'linear-gradient(to right, #667eea, #764ba2)',
-            icon: 'ℹ',
-            duration: 3000
-        }
-    };
-
-    const settings = config[type] || config.info;
-
-    Toastify({
-        text: `${settings.icon} ${message}`,
-        duration: settings.duration,
-        close: true,
-        gravity: "top",
-        position: "right",
-        stopOnFocus: true,
-        style: {
-            background: settings.background,
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '500',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-        }
-    }).showToast();
-};
-
-const showNotification = window.showNotification;
-
-// ===== INICIALIZAR FIREBASE =====
 // ===== INICIALIZAR FIREBASE =====
 async function initializeFirebaseApp() {
     try {
@@ -342,33 +290,6 @@ function initializeAppLogic() {
         if (userRoleElement) {
             userRoleElement.textContent = role.charAt(0).toUpperCase() + role.slice(1);
         }
-    }
-
-    // Função para formatar data
-    function formatDate(dateString) {
-        if (!dateString || dateString.length < 10) return 'N/A';
-        const [year, month, day] = dateString.split('-');
-        return `${day}/${month}/${year}`;
-    }
-
-    // Obter caminho da coleção
-   function getCollectionPath(collectionName) {
-    console.log('🔍 Tentando pegar appId...');
-    const id = getAppId();
-    console.log('🔍 appId obtido:', id);
-    if (!id) throw new Error('Firebase não inicializado');
-    return `artifacts/${id}/public/data/${collectionName}`;
-    }
-
-    function getStatusColor(status) {
-        const colors = {
-            'Não Iniciado': 'bg-gray-100 text-gray-800',
-            'Em Andamento': 'bg-blue-100 text-blue-800',
-            'Concluído': 'bg-green-100 text-green-800',
-            'Atrasado': 'bg-red-100 text-red-800',
-            'Em Pausa': 'bg-yellow-100 text-yellow-800'
-        };
-        return colors[status] || 'bg-gray-100 text-gray-800';
     }
 
 // ===== FIM DA PARTE 1 =====
