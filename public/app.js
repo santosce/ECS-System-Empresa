@@ -1,28 +1,50 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.8 =====
-// Sistema de Gestão de Capacity
-// Última atualização: 28/01/26
-// Correção Importacao Kimai
+// ===== IMPORTAÇÕES DE MÓDULOS =====
+import { 
+    initializeFirebase,
+    getDb,
+    getAuthInstance,
+    getProvider,
+    getAppId,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged,
+    collection,
+    onSnapshot,
+    addDoc,
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc,
+    getDocs
+} from './js/config/firebase-config.js';
+import appState, {
+    getProfissionais,
+    setProfissionais,
+    getProjetos,
+    setProjetos,
+    getAlocacoes,
+    setAlocacoes,
+    getUsers,
+    setUsers,
+    getProfissionalById,
+    getProjetoById,
+    getAlocacaoById
+} from './js/state/app-state.js';
 
-// Importações do Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
+// ===== ECS SYSTEM - VERSÃO 4.0.0 MODULAR =====
+// Sistema de Gestão de Capacity
+// Refatoração modular iniciada em: [24/03/26]
 
 // ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.8';
-const APP_NAME = 'ECS System';
-let app;
-let db;
-let auth;
-let provider;
-let appId;
 
-const appState = {
-    profissionais: [],
-    projetos: [],
-    alocacoes: [],
-    users: []
-};
+const APP_VERSION = '4.0.0';
+const APP_NAME = 'ECS System';
+// Variáveis Firebase agora vêm do módulo firebase-config
+// Usar getters: getDb(), getAuthInstance(), getProvider(), getAppId()
+
+
 
 let openedFromTimeline = false;
 
@@ -87,22 +109,16 @@ window.showNotification = function(message, type = 'info') {
 const showNotification = window.showNotification;
 
 // ===== INICIALIZAR FIREBASE =====
-async function initializeFirebase() {
+// ===== INICIALIZAR FIREBASE =====
+async function initializeFirebaseApp() {
     try {
         console.log(`%c${APP_NAME} v${APP_VERSION}`, 'color: #4f46e5; font-size: 16px; font-weight: bold;');
         console.log('%cSistema inicializando...', 'color: #6b7280;');
         
-        const response = await fetch('/__/firebase/init.json');
-        if (!response.ok) throw new Error('Falha ao carregar configuração do Firebase');
+        // Inicializar Firebase usando o módulo
+        await initializeFirebase();
         
-        const firebaseConfig = await response.json();
-        appId = firebaseConfig.projectId;
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        provider = new GoogleAuthProvider();
-
-        console.log('%c✓ Firebase inicializado com sucesso', 'color: #10b981;');
+        // Inicializar lógica da aplicação
         initializeAppLogic();
     } catch (error) {
         console.error("Falha ao inicializar o Firebase:", error);
@@ -139,11 +155,11 @@ function initializeAppLogic() {
         console.log('🔵 Botão de login clicado');
         try {
             console.log('🔄 Abrindo popup de login...');
-            await signInWithPopup(auth, provider);
+            await signInWithPopup(getAuthInstance(), getProvider());
             console.log('✅ Login concluído com sucesso');
         } catch (error) {
             console.error("❌ Erro no login:", error);
-            if (error.code !== 'auth/popup-closed-by-user') {
+            if (error.code !== 'getAuthInstance()/popup-closed-by-user') {
                 showNotification('Erro ao fazer login: ' + error.message, 'error');
             }
         }
@@ -152,7 +168,7 @@ function initializeAppLogic() {
     // Logout
     logoutBtn?.addEventListener('click', async () => {
         try {
-            await signOut(auth);
+            await signOut(getAuthInstance());
             showNotification('Logout realizado com sucesso', 'info');
         } catch (error) {
             console.error("Erro no logout:", error);
@@ -182,7 +198,7 @@ function initializeAppLogic() {
         }
     });
     // Listener de mudança de autenticação
-    onAuthStateChanged(auth, async (user) => {
+    onAuthStateChanged(getAuthInstance(), async (user) => {
         console.log('🔄 Estado de autenticação mudou:', user ? 'Logado' : 'Não logado');
         
         if (user) {
@@ -224,9 +240,9 @@ function initializeAppLogic() {
     console.log('🔄 Configurando listeners do Firestore...');
     
     // Listener para Profissionais
-    onSnapshot(collection(db, getCollectionPath('profissionais')), (snapshot) => {
-        appState.profissionais = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Profissionais atualizados:', appState.profissionais.length);
+    onSnapshot(collection(getDb(), getCollectionPath('profissionais')), (snapshot) => {
+        setProfissionais(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        console.log('📊 Profissionais atualizados:', getProfissionais().length);
         if (typeof renderProfissionais === 'function') renderProfissionais();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
@@ -237,9 +253,9 @@ function initializeAppLogic() {
     });
 
     // Listener para Projetos
-    onSnapshot(collection(db, getCollectionPath('projetos')), (snapshot) => {
-        appState.projetos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Projetos atualizados:', appState.projetos.length);
+    onSnapshot(collection(getDb(), getCollectionPath('projetos')), (snapshot) => {
+        setProjetos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        console.log('📊 Projetos atualizados:', getProjetos().length);
         if (typeof renderProjetos === 'function') renderProjetos();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
@@ -247,9 +263,9 @@ function initializeAppLogic() {
     });
 
     // Listener para Alocações
-    onSnapshot(collection(db, getCollectionPath('alocacoes')), (snapshot) => {
-        appState.alocacoes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Alocações atualizadas:', appState.alocacoes.length);
+    onSnapshot(collection(getDb(), getCollectionPath('alocacoes')), (snapshot) => {
+        setAlocacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        console.log('📊 Alocações atualizadas:', getAlocacoes().length);
         if (typeof renderAlocacoes === 'function') renderAlocacoes();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
@@ -266,9 +282,9 @@ function initializeAppLogic() {
 
     // Listener para Usuários (apenas admin)
     if (currentUserRole === 'admin') {
-        onSnapshot(collection(db, getCollectionPath('users')), (snapshot) => {
-            appState.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            console.log('📊 Usuários atualizados:', appState.users.length);
+        onSnapshot(collection(getDb(), getCollectionPath('users')), (snapshot) => {
+            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            console.log('📊 Usuários atualizados:', getUsers().length);
             if (typeof renderUsersTable === 'function') renderUsersTable();
         });
     }
@@ -279,7 +295,7 @@ function initializeAppLogic() {
     // Verificar role do usuário
     async function getUserRole(user) {
         try {
-            const userDocRef = doc(db, getCollectionPath('users'), user.uid);
+            const userDocRef = doc(getDb(), getCollectionPath('users'), user.uid);
             const userDoc = await getDoc(userDocRef);
             
             if (userDoc.exists()) {
@@ -336,9 +352,12 @@ function initializeAppLogic() {
     }
 
     // Obter caminho da coleção
-    function getCollectionPath(collectionName) {
-        if (!appId) throw new Error('Firebase não inicializado');
-        return `artifacts/${appId}/public/data/${collectionName}`;
+   function getCollectionPath(collectionName) {
+    console.log('🔍 Tentando pegar appId...');
+    const id = getAppId();
+    console.log('🔍 appId obtido:', id);
+    if (!id) throw new Error('Firebase não inicializado');
+    return `artifacts/${id}/public/data/${collectionName}`;
     }
 
     function getStatusColor(status) {
@@ -577,9 +596,9 @@ function initializeAppLogic() {
         profSelect.innerHTML = '<option value="">Selecione um profissional</option>';
         projSelect.innerHTML = '<option value="">Selecione um projeto</option>';
         
-        const activeProfessionals = appState.profissionais.filter(p => p.ativo !== 'Não');
+        const activeProfessionals = getProfissionais().filter(p => p.ativo !== 'Não');
         activeProfessionals.forEach(p => profSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
-        appState.projetos.forEach(p => projSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
+        getProjetos().forEach(p => projSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
     }
 
     // Cálculo de Horas Estimadas
@@ -611,7 +630,7 @@ function initializeAppLogic() {
         const inicio = new Date(dataInicio + 'T00:00:00');
         const fim = new Date(dataFim + 'T00:00:00');
 
-        const alocacoesConflitantes = appState.alocacoes.filter(a => {
+        const alocacoesConflitantes = getAlocacoes().filter(a => {
             if (alocacaoIdAtual && a.id === alocacaoIdAtual) return false;
             if (a.profissionalId !== profissionalId) return false;
 
@@ -626,7 +645,7 @@ function initializeAppLogic() {
         }
 
         const conflitos = alocacoesConflitantes.map(a => {
-            const projeto = appState.projetos.find(p => p.id === a.projetoId);
+            const projeto = getProjetos().find(p => p.id === a.projetoId);
             return {
                 projeto: projeto?.nome || 'N/A',
                 percentual: a.percentual,
@@ -828,10 +847,10 @@ function initializeAppLogic() {
 
         try {
             if (id) {
-                await setDoc(doc(db, getCollectionPath('profissionais'), id), data);
+                await setDoc(doc(getDb(), getCollectionPath('profissionais'), id), data);
                 showNotification('Profissional atualizado com sucesso!', 'success');
             } else {
-                await addDoc(collection(db, getCollectionPath('profissionais')), data);
+                await addDoc(collection(getDb(), getCollectionPath('profissionais')), data);
                 showNotification('Profissional adicionado com sucesso!', 'success');
             }
             closeModal();
@@ -859,10 +878,10 @@ function initializeAppLogic() {
 
         try {
             if (id) {
-                await setDoc(doc(db, getCollectionPath('projetos'), id), data);
+                await setDoc(doc(getDb(), getCollectionPath('projetos'), id), data);
                 showNotification('Projeto atualizado com sucesso!', 'success');
             } else {
-                await addDoc(collection(db, getCollectionPath('projetos')), data);
+                await addDoc(collection(getDb(), getCollectionPath('projetos')), data);
                 showNotification('Projeto adicionado com sucesso!', 'success');
             }
             closeModal();
@@ -894,7 +913,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         horasRealizadas: parseInt(document.getElementById('horas-realizadas-profissional').value) || 0
     };
 
-    const profissional = appState.profissionais.find(p => p.id === profissionalId);
+    const profissional = getProfissionais().find(p => p.id === profissionalId);
     const resultado = checkProfissionalDisponibilidade(profissionalId, dataInicio, dataFim, percentual, id);
 
     const saveAlocacao = async () => {
@@ -904,10 +923,10 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         try {
             if (id) {
-                await setDoc(doc(db, getCollectionPath('alocacoes'), id), data);
+                await setDoc(doc(getDb(), getCollectionPath('alocacoes'), id), data);
                 showNotification('Alocação atualizada com sucesso!', 'success');
             } else {
-                await addDoc(collection(db, getCollectionPath('alocacoes')), data);
+                await addDoc(collection(getDb(), getCollectionPath('alocacoes')), data);
                 showNotification('Alocação adicionada com sucesso!', 'success');
             }
             closeModal();
@@ -951,7 +970,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterEmpresa = document.getElementById('profissionais-filter-empresa')?.value.toLowerCase() || '';
 
 
-        let filtered = appState.profissionais;
+        let filtered = getProfissionais();
         if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
         if (filterPerfil) filtered = filtered.filter(p => p.perfil.toLowerCase().includes(filterPerfil));
         if (filterTime) filtered = filtered.filter(p => p.time.toLowerCase().includes(filterTime));
@@ -989,7 +1008,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterCliente = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
         const filterStatus = document.getElementById('projetos-filter-status')?.value || '';
 
-        let filtered = appState.projetos;
+        let filtered = getProjetos();
         if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
         if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
         if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
@@ -1027,14 +1046,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterProf = document.getElementById('alocacoes-filter-profissional')?.value || '';
         const filterProj = document.getElementById('alocacoes-filter-projeto')?.value || '';
 
-        let filtered = appState.alocacoes;
+        let filtered = getAlocacoes();
         if (filterProf) filtered = filtered.filter(a => a.profissionalId === filterProf);
         if (filterProj) filtered = filtered.filter(a => a.projetoId === filterProj);
 
         // ✅ ORDENAÇÃO: Primeiro por profissional (alfabética), depois por período (data início)
         filtered.sort((a, b) => {
-            const profA = appState.profissionais.find(p => p.id === a.profissionalId);
-            const profB = appState.profissionais.find(p => p.id === b.profissionalId);
+            const profA = getProfissionais().find(p => p.id === a.profissionalId);
+            const profB = getProfissionais().find(p => p.id === b.profissionalId);
             
             const nomeA = profA?.nome || '';
             const nomeB = profB?.nome || '';
@@ -1053,8 +1072,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         });
 
         const rows = filtered.map(aloc => {
-            const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
-            const proj = appState.projetos.find(p => p.id === aloc.projetoId);
+            const prof = getProfissionais().find(p => p.id === aloc.profissionalId);
+            const proj = getProjetos().find(p => p.id === aloc.projetoId);
 
             return `
                 <tr class="bg-white border-b hover:bg-gray-50">
@@ -1080,7 +1099,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     const tbody = document.getElementById('users-table-body');
     if (!tbody) return;
 
-    const rows = appState.users.map(user => {
+    const rows = getUsers().map(user => {
         const isActive = user.active !== false; // Default true se não definido
         const statusBadge = isActive 
             ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Ativo</span>'
@@ -1116,14 +1135,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     // ===== FUNÇÕES GLOBAIS PARA OS BOTÕES =====
     window.editProfissional = async (id) => {
-        const prof = appState.profissionais.find(p => p.id === id);
+        const prof = getProfissionais().find(p => p.id === id);
         if (prof) openProfissionalModal(prof);
     };
 
     window.deleteProfissional = async (id) => {
         if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
         try {
-            await deleteDoc(doc(db, getCollectionPath('profissionais'), id));
+            await deleteDoc(doc(getDb(), getCollectionPath('profissionais'), id));
             showNotification('Profissional excluído com sucesso!', 'success');
         } catch (error) {
             console.error('Erro ao excluir:', error);
@@ -1132,14 +1151,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 
     window.editProjeto = async (id) => {
-        const proj = appState.projetos.find(p => p.id === id);
+        const proj = getProjetos().find(p => p.id === id);
         if (proj) openProjetoModal(proj);
     };
 
     window.deleteProjeto = async (id) => {
         if (!confirm('Tem certeza que deseja excluir este projeto?')) return;
         try {
-            await deleteDoc(doc(db, getCollectionPath('projetos'), id));
+            await deleteDoc(doc(getDb(), getCollectionPath('projetos'), id));
             showNotification('Projeto excluído com sucesso!', 'success');
         } catch (error) {
             console.error('Erro ao excluir:', error);
@@ -1148,14 +1167,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 
     window.editAlocacao = async (id) => {
-        const aloc = appState.alocacoes.find(a => a.id === id);
+        const aloc = getAlocacoes().find(a => a.id === id);
         if (aloc) openAlocacaoModal(aloc);
     };
 
     window.deleteAlocacao = async (id) => {
         if (!confirm('Tem certeza que deseja excluir esta alocação?')) return;
         try {
-            await deleteDoc(doc(db, getCollectionPath('alocacoes'), id));
+            await deleteDoc(doc(getDb(), getCollectionPath('alocacoes'), id));
             showNotification('Alocação excluída com sucesso!', 'success');
         } catch (error) {
             console.error('Erro ao excluir:', error);
@@ -1164,7 +1183,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 
     window.changeUserRole = async (userId) => {
-        const user = appState.users.find(u => u.id === userId);
+        const user = getUsers().find(u => u.id === userId);
         if (!user) return;
 
         const newRole = prompt(`Alterar papel de ${user.name}:\n\nDigite 'admin', 'editor' ou 'viewer':`, user.role);
@@ -1174,7 +1193,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         try {
-            await setDoc(doc(db, getCollectionPath('users'), userId), { ...user, role: newRole });
+            await setDoc(doc(getDb(), getCollectionPath('users'), userId), { ...user, role: newRole });
             showNotification('Papel alterado com sucesso!', 'success');
         } catch (error) {
             console.error('Erro ao alterar papel:', error);
@@ -1183,7 +1202,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     };
 	// ✅ Função para alternar status do usuário (Ativar/Inativar)
 	window.toggleUserStatus = async (userId, newStatus) => {
-		const user = appState.users.find(u => u.id === userId);
+		const user = getUsers().find(u => u.id === userId);
 		if (!user) return;
 
 		const action = newStatus ? 'ativar' : 'inativar';
@@ -1193,7 +1212,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 		}
 
 		try {
-			await setDoc(doc(db, getCollectionPath('users'), userId), {
+			await setDoc(doc(getDb(), getCollectionPath('users'), userId), {
 				...user,
 				active: newStatus
 			});
@@ -1207,11 +1226,11 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 // ✅ Função para excluir usuário
 // ✅ Versão alternativa se currentUserId não estiver acessível
 	window.deleteUser = async (userId) => {
-		const user = appState.users.find(u => u.id === userId);
+		const user = getUsers().find(u => u.id === userId);
 		if (!user) return;
 
-		// Prevenir exclusão do próprio usuário usando auth.currentUser
-		if (userId === auth.currentUser?.uid) {
+		// Prevenir exclusão do próprio usuário usando getAuthInstance().currentUser
+		if (userId === augetAuthInstance().currentUser?.uid) {
 			showNotification('Você não pode excluir seu próprio usuário!', 'warning');
 			return;
 		}
@@ -1226,7 +1245,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 		}
 
 		try {
-			await deleteDoc(doc(db, getCollectionPath('users'), userId));
+			await deleteDoc(doc(getDb(), getCollectionPath('users'), userId));
 			showNotification('Usuário excluído com sucesso!', 'success');
 		} catch (error) {
 			console.error('Erro ao excluir usuário:', error);
@@ -1258,8 +1277,8 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     // ===== POPULADORES DE FILTROS =====
     
     function populateDashboardFilters() {
-        const times = [...new Set(appState.profissionais.map(p => p.time))].sort();
-        const lideres = [...new Set(appState.profissionais.map(p => p.lider))].sort();
+        const times = [...new Set(getProfissionais().map(p => p.time))].sort();
+        const lideres = [...new Set(getProfissionais().map(p => p.lider))].sort();
         
         ['dashboard-filter-time', 'project-dashboard-filter-time'].forEach(id => {
             const select = document.getElementById(id);
@@ -1279,7 +1298,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         const projetoSelect = document.getElementById('dashboard-filter-projeto');
         if (projetoSelect) {
-            const projetos = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
+            const projetos = [...getProjetos()].sort((a, b) => a.nome.localeCompare(b.nome));
             projetoSelect.innerHTML = '<option value="">Todos Projetos</option>' +
                 projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
@@ -1312,7 +1331,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const perfilSelect = document.getElementById('availability-chart-perfil-filter');
 
         if (profSelect) {
-            const profissionaisAtivos = appState.profissionais
+            const profissionaisAtivos = getProfissionais()
                 .filter(p => p.ativo !== 'Não')
                 .sort((a, b) => a.nome.localeCompare(b.nome));
             profSelect.innerHTML = '<option value="">Todos</option>' +
@@ -1320,7 +1339,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         if (perfilSelect) {
-            const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
+            const perfis = [...new Set(getProfissionais().map(p => p.perfil))].sort();
             perfilSelect.innerHTML = '<option value="">Todos Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
         }
@@ -1329,7 +1348,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     function populateProfileFilters() {
         const profileSelect = document.getElementById('availability-filter-profile');
         if (profileSelect) {
-            const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
+            const perfis = [...new Set(getProfissionais().map(p => p.perfil))].sort();
             profileSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
         }
@@ -1340,7 +1359,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const projSelect = document.getElementById('alocacoes-filter-projeto');
 
         if (profSelect) {
-            const profissionaisAtivos = appState.profissionais
+            const profissionaisAtivos = getProfissionais()
                 .filter(p => p.ativo !== 'Não')
                 .sort((a, b) => a.nome.localeCompare(b.nome));
 
@@ -1349,7 +1368,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         if (projSelect) {
-            const projetos = appState.projetos.sort((a, b) => a.nome.localeCompare(b.nome));
+            const projetos = getProjetos().sort((a, b) => a.nome.localeCompare(b.nome));
             projSelect.innerHTML = '<option value="">Todos Projetos</option>' +
                 projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
@@ -1362,7 +1381,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
         if (profSelect) {
             // ✅ Filtrar apenas profissionais ATIVOS e ordenar alfabeticamente
-            const profissionaisAtivosOrdenados = [...appState.profissionais]
+            const profissionaisAtivosOrdenados = [...getProfissionais()]
                 .filter(p => p.ativo !== 'Não' && p.nome) // Apenas ativos com nome válido
                 .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
             profSelect.innerHTML = '<option value="">Todos</option>' +
@@ -1370,14 +1389,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         if (projSelect) {
-            const projetosOrdenados = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
+            const projetosOrdenados = [...getProjetos()].sort((a, b) => a.nome.localeCompare(b.nome));
             projSelect.innerHTML = '<option value="">Todos</option>' +
                 projetosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
         if (perfilSelect) {
             // ✅ Filtrar perfis apenas de profissionais ATIVOS
-            const perfis = [...new Set(appState.profissionais
+            const perfis = [...new Set(getProfissionais()
                 .filter(p => p.ativo !== 'Não')
                 .map(p => p.perfil)
                 .filter(pf => pf) // Remover undefined/null
@@ -1399,13 +1418,13 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     // ===== DASHBOARD =====
     let updateDashboard = function() {
         // Métricas principais
-        const totalProfissionais = appState.profissionais.filter(p => p.ativo !== 'Não').length;
-        const totalProjetos = appState.projetos.length;
+        const totalProfissionais = getProfissionais().filter(p => p.ativo !== 'Não').length;
+        const totalProjetos = getProjetos().length;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const alocacoesAtivas = appState.alocacoes.filter(a => {
+        const alocacoesAtivas = getAlocacoes().filter(a => {
             const inicio = new Date(a.dataInicio + 'T00:00:00');
             const fim = new Date(a.dataFim + 'T00:00:00');
             return inicio <= today && fim >= today;
@@ -1466,14 +1485,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         periodoFim.setHours(23, 59, 59, 999);
     }
 
-    let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
+    let filtered = getProfissionais().filter(p => p.ativo !== 'Não');
 
     if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
     if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
     if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
 
     const rows = filtered.map(prof => {
-        let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
+        let alocacoes = getAlocacoes().filter(a => a.profissionalId === prof.id);
 
         if (filterProjeto) {
             alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
@@ -1518,7 +1537,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                            'text-yellow-600';
 
         const projetos = alocacoes.map(a => {
-            const proj = appState.projetos.find(p => p.id === a.projetoId);
+            const proj = getProjetos().find(p => p.id === a.projetoId);
             return proj?.nome || 'N/A';
         });
         const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
@@ -1597,17 +1616,17 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         
         const selectedStatuses = Array.from(document.querySelectorAll('.project-status-filter:checked')).map(cb => cb.value);
 
-        let filtered = appState.projetos;
+        let filtered = getProjetos();
 
         if (selectedStatuses.length > 0) {
             filtered = filtered.filter(p => selectedStatuses.includes(p.status));
         }
 
         const rows = filtered.map(proj => {
-            const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
+            const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
             
             const profissionaisAlocados = alocacoes.map(a => {
-                const prof = appState.profissionais.find(p => p.id === a.profissionalId);
+                const prof = getProfissionais().find(p => p.id === a.profissionalId);
                 if (!prof) return null;
                 
                 if (filterNome && !prof.nome.toLowerCase().includes(filterNome)) return null;
@@ -1651,7 +1670,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterStatusFim = document.getElementById('prazos-filter-status-fim')?.value || '';
         const filterStatusProjeto = document.getElementById('prazos-filter-status-projeto')?.value || '';
 
-        let filtered = appState.projetos;
+        let filtered = getProjetos();
         
         // Filtro por nome do projeto
         if (filterProjeto) {
@@ -1737,7 +1756,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         // ✅ APLICAR FILTRO
         const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
 
-        let filtered = appState.projetos;
+        let filtered = getProjetos();
         
         // Filtro por nome do projeto
         if (filterProjeto) {
@@ -1745,7 +1764,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         const rows = filtered.map(proj => {
-            const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
+            const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
             
             const horasEstimadasProj = proj.horasEstimadasProjeto || 0;
             const horasAlocadas = alocacoes.reduce((sum, a) => sum + (parseInt(a.horasEstimadas) || 0), 0);
@@ -1812,7 +1831,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         const profiles = {};
-        appState.profissionais.filter(p => p.ativo !== 'Não').forEach(p => {
+        getProfissionais().filter(p => p.ativo !== 'Não').forEach(p => {
             profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
         });
 
@@ -1925,7 +1944,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     const firstDay = new Date(parseInt(year), parseInt(month) - 1, 1);
     const lastDay = new Date(parseInt(year), parseInt(month), 0);
 
-    let profissionais = appState.profissionais.filter(p => p.ativo !== 'Não');
+    let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
     if (profFilter) profissionais = profissionais.filter(p => p.id === profFilter);
     if (perfilFilter) profissionais = profissionais.filter(p => p.perfil === perfilFilter);
 
@@ -1933,7 +1952,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     const labels = profissionais.map(p => p.nome);
     const horasAlocadas = profissionais.map(prof => {
-        const alocacoes = appState.alocacoes.filter(a => {
+        const alocacoes = getAlocacoes().filter(a => {
             if (a.profissionalId !== prof.id) return false;
             const alocInicio = new Date(a.dataInicio + 'T00:00:00');
             const alocFim = new Date(a.dataFim + 'T00:00:00');
@@ -2107,14 +2126,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             return;
         }
 
-        let profissionais = appState.profissionais.filter(p => p.ativo !== 'Não');
+        let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
         if (profile) profissionais = profissionais.filter(p => p.perfil === profile);
 
         const periodoInicio = new Date(startDate + 'T00:00:00');
         const periodoFim = new Date(endDate + 'T00:00:00');
 
         const disponibilidades = profissionais.map(prof => {
-            const alocacoes = appState.alocacoes.filter(a => {
+            const alocacoes = getAlocacoes().filter(a => {
                 if (a.profissionalId !== prof.id) return false;
                 const alocInicio = new Date(a.dataInicio + 'T00:00:00');
                 const alocFim = new Date(a.dataFim + 'T00:00:00');
@@ -2383,9 +2402,9 @@ function drawTimelineChart() {
     const filterProj = document.getElementById('timeline-filter-projeto')?.value || '';
     const filterPerfil = document.getElementById('timeline-filter-perfil')?.value || '';
 
-    let alocacoes = appState.alocacoes.filter(a => {
+    let alocacoes = getAlocacoes().filter(a => {
         // ✅ Buscar profissional para validações
-        const prof = appState.profissionais.find(p => p.id === a.profissionalId);
+        const prof = getProfissionais().find(p => p.id === a.profissionalId);
 
         // ✅ FILTRO 1: Apenas profissionais ATIVOS e com nome válido
         if (!prof || prof.ativo === 'Não' || !prof.nome) return false;
@@ -2402,8 +2421,8 @@ function drawTimelineChart() {
 
     // ✅ ORDENAR alocações por nome do profissional (alfabeticamente)
     alocacoes.sort((a, b) => {
-        const profA = appState.profissionais.find(p => p.id === a.profissionalId);
-        const profB = appState.profissionais.find(p => p.id === b.profissionalId);
+        const profA = getProfissionais().find(p => p.id === a.profissionalId);
+        const profB = getProfissionais().find(p => p.id === b.profissionalId);
         return (profA?.nome || '').localeCompare(profB?.nome || '');
     });
 
@@ -2441,8 +2460,8 @@ function drawTimelineChart() {
 
     // Adicionar as alocações normais
     alocacoes.forEach(aloc => {
-        const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
-        const proj = appState.projetos.find(p => p.id === aloc.projetoId);
+        const prof = getProfissionais().find(p => p.id === aloc.profissionalId);
+        const proj = getProjetos().find(p => p.id === aloc.projetoId);
 
         // ✅ Validar profissional, projeto e nomes (evitar "undefined")
         if (!prof || !proj) return;
@@ -2941,8 +2960,8 @@ function addTodayLineToTimeline(container, alocacoes) {
         console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
 
         // ✅ LOG DE DEBUG: Mostrar projetos e profissionais disponíveis no sistema
-        console.log('📋 Projetos no sistema:', appState.projetos.map(p => p.nome));
-        console.log('📋 Profissionais no sistema:', appState.profissionais.map(p => p.nome));
+        console.log('📋 Projetos no sistema:', getProjetos().map(p => p.nome));
+        console.log('📋 Profissionais no sistema:', getProfissionais().map(p => p.nome));
 
         // ✅ LOG DE DEBUG: Mostrar totais
         for (const [key, dados] of registrosPorAlocacao.entries()) {
@@ -2959,13 +2978,13 @@ function addTodayLineToTimeline(container, alocacoes) {
 
             try {
                 // Encontrar profissional - priorizar match exato, depois match mais específico
-                let profissional = appState.profissionais.find(p =>
+                let profissional = getProfissionais().find(p =>
                     p.nome.toLowerCase().trim() === nomeUsuario.toLowerCase().trim()
                 );
 
                 // Se não encontrou match exato, buscar match parcial preferindo o mais específico
                 if (!profissional) {
-                    const profissionaisMatch = appState.profissionais.filter(p =>
+                    const profissionaisMatch = getProfissionais().filter(p =>
                         p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
                         nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
                     );
@@ -2986,13 +3005,13 @@ function addTodayLineToTimeline(container, alocacoes) {
                 }
 
                 // Encontrar projeto - priorizar match exato, depois match mais específico
-                let projeto = appState.projetos.find(p =>
+                let projeto = getProjetos().find(p =>
                     p.nome.toLowerCase().trim() === nomeProjeto.toLowerCase().trim()
                 );
 
                 // Se não encontrou match exato, buscar match parcial preferindo o mais específico
                 if (!projeto) {
-                    const projetosMatch = appState.projetos.filter(p =>
+                    const projetosMatch = getProjetos().filter(p =>
                         p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
                         nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
                     );
@@ -3014,7 +3033,7 @@ function addTodayLineToTimeline(container, alocacoes) {
                 }
 
                 // Encontrar alocação
-                const alocacao = appState.alocacoes.find(a => 
+                const alocacao = getAlocacoes().find(a => 
                     a.profissionalId === profissional.id && 
                     a.projetoId === projeto.id
                 );
@@ -3035,7 +3054,7 @@ function addTodayLineToTimeline(container, alocacoes) {
                 console.log(`💾 Salvando: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
 
                 // Atualizar no Firestore
-                await setDoc(doc(db, getCollectionPath('alocacoes'), alocacao.id), {
+                await setDoc(doc(getDb(), getCollectionPath('alocacoes'), alocacao.id), {
                     ...alocacao,
                     horasRealizadas: novoTotal,
                     registrosPorData: registrosNovos,
@@ -3310,7 +3329,7 @@ function addTodayLineToTimeline(container, alocacoes) {
 }	
 
 // ===== INICIALIZAÇÃO =====
-initializeFirebase();
+initializeFirebaseApp();
 
 // ===== FIM DA PARTE 3 =====
 // ✅ ARQUIVO app.js COMPLETO v3.1.0
