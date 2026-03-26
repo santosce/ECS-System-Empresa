@@ -39,6 +39,16 @@ import {
     getCollectionPath,
     showNotification
 } from './js/core/utils.js';
+import {
+    getCurrentUserId,
+    getCurrentUserRole,
+    isAdmin,
+    loginWithGoogle,
+    logout,
+    getUserRole,
+    updateUIBasedOnRole,
+    setupAuthListener
+} from './js/core/auth.js';
 
 
 
@@ -76,8 +86,6 @@ async function initializeFirebaseApp() {
 
 // ===== LÓGICA PRINCIPAL DA APLICAÇÃO =====
 function initializeAppLogic() {
-    let currentUserId = null;
-    let currentUserRole = null;
     let profileChart = null;
     let monthlyAvailabilityChart = null;
     let isGoogleChartsLoaded = false;
@@ -98,31 +106,12 @@ function initializeAppLogic() {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
 
-    // ✅ CORREÇÃO: Login com Popup (estava faltando!)
-    loginBtn?.addEventListener('click', async () => {
-        console.log('🔵 Botão de login clicado');
-        try {
-            console.log('🔄 Abrindo popup de login...');
-            await signInWithPopup(getAuthInstance(), getProvider());
-            console.log('✅ Login concluído com sucesso');
-        } catch (error) {
-            console.error("❌ Erro no login:", error);
-            if (error.code !== 'getAuthInstance()/popup-closed-by-user') {
-                showNotification('Erro ao fazer login: ' + error.message, 'error');
-            }
-        }
-    });
+    //  Login 
+    loginBtn.addEventListener('click', loginWithGoogle);
 
     // Logout
-    logoutBtn?.addEventListener('click', async () => {
-        try {
-            await signOut(getAuthInstance());
-            showNotification('Logout realizado com sucesso', 'info');
-        } catch (error) {
-            console.error("Erro no logout:", error);
-            showNotification('Erro ao fazer logout', 'error');
-        }
-    });
+    logoutBtn.addEventListener('click', logout);
+
 	// ===== NOVO: Listener global para expandir/recolher listas de importação =====
     document.body.addEventListener('click', function(e) {
         // Verifica se o clique foi em um link "expand-toggle"
@@ -145,52 +134,34 @@ function initializeAppLogic() {
             }
         }
     });
-    // Listener de mudança de autenticação
-    onAuthStateChanged(getAuthInstance(), async (user) => {
-        console.log('🔄 Estado de autenticação mudou:', user ? 'Logado' : 'Não logado');
-        
-        if (user) {
-            console.log('✅ Usuário autenticado:', user.email);
-            currentUserId = user.uid;
-            
-            // Obter role do usuário
-            currentUserRole = await getUserRole(user);
-            console.log('👤 Role do usuário:', currentUserRole);
-            
-            // Atualizar UI do usuário
-            document.getElementById('user-name').textContent = user.displayName || user.email;
-            document.getElementById('user-photo').src = user.photoURL || 'https://via.placeholder.com/40';
-            document.getElementById('user-role').textContent = currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1);
-            
-            // Mostrar app, esconder login
-            loginView.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-            
-            updateUIBasedOnRole(currentUserRole);
-            
-            // Configurar listeners do Firestore
-            setupFirestoreListeners();
-            
-            showNotification('Bem-vindo, ' + user.displayName + '!', 'success');
-        } else {
-            console.log('❌ Usuário não autenticado');
-            currentUserId = null;
-            currentUserRole = null;
-            
-            // Mostrar login, esconder app
-            loginView.classList.remove('hidden');
-            appContainer.classList.add('hidden');
-        }
-    });
+    // Configurar listener de autenticação
+setupAuthListener(
+    async (user, role) => {
+        loginView.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        setupFirestoreListeners();
+    },
+    () => {
+        clearFirestoreListeners();  // ← ADICIONAR ESTA LINHA
+        loginView.classList.remove('hidden');
+        appContainer.classList.add('hidden');
+    }
+);
+    
 
     // Função para configurar listeners do Firestore
-    function setupFirestoreListeners() {
+    // Variável global para armazenar os unsubscribe dos listeners
+let firestoreUnsubscribers = [];
+
+function setupFirestoreListeners() {
     console.log('🔄 Configurando listeners do Firestore...');
     
+    // Limpar listeners anteriores se existirem
+    clearFirestoreListeners();
+    
     // Listener para Profissionais
-    onSnapshot(collection(getDb(), getCollectionPath('profissionais')), (snapshot) => {
+    const unsubProf = onSnapshot(collection(getDb(), getCollectionPath('profissionais')), (snapshot) => {
         setProfissionais(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        console.log('📊 Profissionais atualizados:', getProfissionais().length);
         if (typeof renderProfissionais === 'function') renderProfissionais();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
@@ -199,27 +170,26 @@ function initializeAppLogic() {
         if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
         if (typeof populateProfissionaisFilters === 'function') populateProfissionaisFilters();
     });
+    firestoreUnsubscribers.push(unsubProf);
 
     // Listener para Projetos
-    onSnapshot(collection(getDb(), getCollectionPath('projetos')), (snapshot) => {
+    const unsubProj = onSnapshot(collection(getDb(), getCollectionPath('projetos')), (snapshot) => {
         setProjetos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        console.log('📊 Projetos atualizados:', getProjetos().length);
         if (typeof renderProjetos === 'function') renderProjetos();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
         if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
     });
+    firestoreUnsubscribers.push(unsubProj);
 
     // Listener para Alocações
-    onSnapshot(collection(getDb(), getCollectionPath('alocacoes')), (snapshot) => {
+    const unsubAloc = onSnapshot(collection(getDb(), getCollectionPath('alocacoes')), (snapshot) => {
         setAlocacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        console.log('📊 Alocações atualizadas:', getAlocacoes().length);
         if (typeof renderAlocacoes === 'function') renderAlocacoes();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
         if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
         
-        // ✅ REDESENHAR GRÁFICO MENSAL APÓS CARREGAR ALOCAÇÕES
         setTimeout(() => {
             if (typeof updateMonthlyAvailabilityChart === 'function') {
                 console.log('🔄 Redesenhando gráfico mensal após carregar dados...');
@@ -227,71 +197,25 @@ function initializeAppLogic() {
             }
         }, 800);
     });
+    firestoreUnsubscribers.push(unsubAloc);
 
     // Listener para Usuários (apenas admin)
-    if (currentUserRole === 'admin') {
-        onSnapshot(collection(getDb(), getCollectionPath('users')), (snapshot) => {
+    if (getCurrentUserRole() === 'admin') {
+        const unsubUsers = onSnapshot(collection(getDb(), getCollectionPath('users')), (snapshot) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            console.log('📊 Usuários atualizados:', getUsers().length);
             if (typeof renderUsersTable === 'function') renderUsersTable();
         });
+        firestoreUnsubscribers.push(unsubUsers);
     }
     
     console.log('✅ Listeners do Firestore configurados');
 }
 
-    // Verificar role do usuário
-    async function getUserRole(user) {
-        try {
-            const userDocRef = doc(getDb(), getCollectionPath('users'), user.uid);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (userDoc.exists()) {
-                return userDoc.data().role || 'viewer';
-            } else {
-                const newUserData = {
-                    email: user.email,
-                    name: user.displayName,
-                    role: 'viewer',
-                    active: true,
-                    createdAt: new Date().toISOString()
-                };
-                await setDoc(userDocRef, newUserData);
-                return 'viewer';
-            }
-        } catch (error) {
-            console.error('Erro ao verificar role:', error);
-            return 'viewer';
-        }
-    }
-
-    // Atualizar UI baseado no role
-    function updateUIBasedOnRole(role) {
-        if (!role) return;
-        
-        const isViewer = role === 'viewer';
-        const isAdmin = role === 'admin';
-        
-        document.querySelectorAll('.edit-btn, .delete-btn, .add-btn').forEach(btn => {
-            btn.style.display = isViewer ? 'none' : '';
-        });
-        
-        const mainActions = document.getElementById('main-actions');
-        if (mainActions) {
-            mainActions.style.display = isViewer ? 'none' : 'block';
-        }
-        
-        const manageUsersLink = document.getElementById('manage-users-link');
-        if (manageUsersLink) {
-            manageUsersLink.classList.toggle('hidden', !isAdmin);
-        }
-        
-        const userRoleElement = document.getElementById('user-role');
-        if (userRoleElement) {
-            userRoleElement.textContent = role.charAt(0).toUpperCase() + role.slice(1);
-        }
-    }
-
+function clearFirestoreListeners() {
+    console.log('🧹 Limpando listeners do Firestore...');
+    firestoreUnsubscribers.forEach(unsub => unsub());
+    firestoreUnsubscribers = [];
+}
 // ===== FIM DA PARTE 1 =====
 // ===== PARTE 2 - NAVEGAÇÃO, MODAIS E RENDERIZAÇÃO =====
 
@@ -349,7 +273,7 @@ function initializeAppLogic() {
             }, 200);
         }
         
-        updateUIBasedOnRole(currentUserRole);
+        updateUIBasedOnRole(getCurrentUserRole());
     }
 
     navLinks.forEach(link => link.addEventListener('click', (e) => {
@@ -1145,7 +1069,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 	};
 
 // ✅ Função para excluir usuário
-// ✅ Versão alternativa se currentUserId não estiver acessível
+// ✅ Versão alternativa se getCurrentUserId() não estiver acessível
 	window.deleteUser = async (userId) => {
 		const user = getUsers().find(u => u.id === userId);
 		if (!user) return;
