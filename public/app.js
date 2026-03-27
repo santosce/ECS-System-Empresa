@@ -1,5 +1,6 @@
 // ===== IMPORTAÇÕES DE MÓDULOS =====
 import { 
+    
     initializeFirebase,
     getDb,
     getAuthInstance,
@@ -49,6 +50,13 @@ import {
     updateUIBasedOnRole,
     setupAuthListener
 } from './js/core/auth.js';
+import {
+    initializeNavigation,
+    switchView,
+    setupNavigationListeners,
+    getOpenedFromTimeline,
+    setOpenedFromTimeline
+} from './js/core/navigation.js';
 
 
 
@@ -56,15 +64,6 @@ import {
 // Sistema de Gestão de Capacity
 // Refatoração modular iniciada em: [24/03/26]
 
-// ===== VARIÁVEIS GLOBAIS =====
-
-
-// Variáveis Firebase agora vêm do módulo firebase-config
-// Usar getters: getDb(), getAuthInstance(), getProvider(), getAppId()
-
-
-
-let openedFromTimeline = false;
 
 
 // ===== INICIALIZAR FIREBASE =====
@@ -89,6 +88,13 @@ function initializeAppLogic() {
     let profileChart = null;
     let monthlyAvailabilityChart = null;
     let isGoogleChartsLoaded = false;
+    // Inicializar navegação
+    initializeNavigation();  
+    
+    // Carregar Google Charts
+    if (typeof google !== 'undefined' && google.charts) {
+        // ...
+    }
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -219,69 +225,7 @@ function clearFirestoreListeners() {
 // ===== FIM DA PARTE 1 =====
 // ===== PARTE 2 - NAVEGAÇÃO, MODAIS E RENDERIZAÇÃO =====
 
-    // ===== NAVEGAÇÃO E VIEWS =====
-    const views = document.querySelectorAll('.view');
-    const navLinks = document.querySelectorAll('.nav-link');
-    const viewTitle = document.getElementById('view-title');
-    const mainActionsContainer = document.getElementById('main-actions');
-    
-    const addIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
-    
-    const createButton = (id, text, icon) => `<button id="${id}" class="add-btn px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center">${icon}${text}</button>`;
-
-    const viewConfig = {
-        dashboard: { title: 'Dashboard', actions: '' },
-        'buscar-disponibilidade': { title: 'Buscar Disponibilidade', actions: '' },
-        profissionais: { title: 'Profissionais', actions: createButton('add-profissional-btn', 'Adicionar Profissional', addIcon) },
-        projetos: { title: 'Projetos', actions: createButton('add-projeto-btn', 'Adicionar Projeto', addIcon) },
-        alocacoes: { title: 'Alocações', actions: createButton('add-alocacao-btn', 'Adicionar Alocação', addIcon) },
-        timeline: { title: 'Timeline de Capacity', actions: '' },
-        'gerenciar-usuarios': { title: 'Gerenciar Usuários', actions: '' },
-    };
-
-    function switchView(viewId) {
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById(viewId)?.classList.add('active');
-
-        navLinks.forEach(link => link.classList.remove('bg-gray-900'));
-        document.querySelector(`.nav-link[data-view="${viewId}"]`)?.classList.add('bg-gray-900');
-        
-        viewTitle.textContent = viewConfig[viewId]?.title || 'Página não encontrada';
-        mainActionsContainer.innerHTML = viewConfig[viewId]?.actions || '';
-        
-        document.getElementById('add-profissional-btn')?.addEventListener('click', () => openProfissionalModal());
-        document.getElementById('add-projeto-btn')?.addEventListener('click', () => openProjetoModal());
-        document.getElementById('add-alocacao-btn')?.addEventListener('click', () => openAlocacaoModal());
-
-        if (viewId === 'timeline' && isGoogleChartsLoaded) {
-             setTimeout(() => {
-                drawTimelineChart();
-             }, 100);
-        }
-
-        // ✅ NOVO: Redesenhar gráficos ao voltar para Dashboard
-        if (viewId === 'dashboard') {
-            setTimeout(() => {
-                if (profileChart) {
-                    profileChart.resize();
-                    profileChart.update('none');
-                }
-                if (monthlyAvailabilityChart) {
-                    monthlyAvailabilityChart.resize();
-                    monthlyAvailabilityChart.update('none');
-                }
-            }, 200);
-        }
-        
-        updateUIBasedOnRole(getCurrentUserRole());
-    }
-
-    navLinks.forEach(link => link.addEventListener('click', (e) => {
-        e.preventDefault();
-        switchView(e.currentTarget.dataset.view);
-    }));
-
-    // ===== SISTEMA DE ABAS DO DASHBOARD =====
+     // ===== SISTEMA DE ABAS DO DASHBOARD =====
     const dashboardTabs = document.querySelectorAll('.dashboard-tab');
     const dashboardTabContents = document.querySelectorAll('.dashboard-tab-content');
 
@@ -650,7 +594,7 @@ function clearFirestoreListeners() {
     const openProfissionalModal = (data) => openModal('profissional', data);
     const openProjetoModal = (data) => openModal('projeto', data);
     const openAlocacaoModal = (data) => {
-        openedFromTimeline = false;
+        setOpenedFromTimeline(false);
         openModal('alocacao', data);
     };
 
@@ -662,8 +606,8 @@ function clearFirestoreListeners() {
             todayLine.style.display = 'block';
         }
         
-        if (openedFromTimeline) {
-            openedFromTimeline = false;
+        if (getOpenedFromTimeline()) {
+            setOpenedFromTimeline(false);
             switchView('timeline');
         }
     }
@@ -1663,17 +1607,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     });
 
     // ===== GRÁFICOS =====
+
+    
     function updateProfileChart() {
         const canvas = document.getElementById('profile-distribution-chart');
         if (!canvas) return;
 
-        // ✅ Verificar se o canvas está visível
-        const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-        if (!isVisible) {
-            console.log('⏳ Canvas do perfil não visível, tentando novamente...');
-            setTimeout(updateProfileChart, 200);
-            return;
-        }
+        // Não renderizar se o dashboard não estiver ativo
+        const dashboardView = document.getElementById('dashboard');
+        if (!dashboardView || !dashboardView.classList.contains('active')) return;
 
         const profiles = {};
         getProfissionais().filter(p => p.ativo !== 'Não').forEach(p => {
@@ -1767,13 +1709,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     const canvas = document.getElementById('monthly-availability-chart');
     if (!canvas) return;
 
-    // ✅ FIX: Verificar se o canvas está visível antes de desenhar
-    const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-    if (!isVisible) {
-        console.log('⏳ Canvas não visível ainda, agendando redesenho...');
-        setTimeout(updateMonthlyAvailabilityChart, 200);
-        return;
-    }
+    // Não renderizar se o dashboard não estiver visível
+    const dashboardView = document.getElementById('dashboard');
+    if (!dashboardView || !dashboardView.classList.contains('active')) return;
     const monthSelector = document.getElementById('availability-month-selector');
     const profFilter = document.getElementById('availability-chart-prof-filter')?.value || '';
     const perfilFilter = document.getElementById('availability-chart-perfil-filter')?.value || '';
@@ -2362,7 +2300,7 @@ function drawTimelineChart() {
             
             const alocacao = alocacoes[row - 1]; // -1 porque a primeira é invisível
             if (alocacao) {
-                openedFromTimeline = true;
+                setOpenedFromTimeline(true);
                 openAlocacaoModal(alocacao);
             }
         }
@@ -2407,13 +2345,22 @@ function drawTimelineChart() {
         addTodayLineToTimeline(container, alocacoes);
     }, 500);
 }
-
+// Contador de tentativas para evitar loop infinito - Timeline
+let todayLineRetries = 0;
+const MAX_RETRIES_TIMELINE = 10;
 function addTodayLineToTimeline(container, alocacoes) {
     const svg = container.querySelector('svg');
     if (!svg) {
+    if (todayLineRetries < MAX_RETRIES_TIMELINE) {
         console.log('⏳ SVG não encontrado, tentando novamente...');
+        todayLineRetries++;
         setTimeout(() => addTodayLineToTimeline(container, alocacoes), 300);
         return;
+    } else {
+        console.log('⚠ SVG timeline não encontrado após máximo de tentativas');
+        todayLineRetries = 0;
+        return;
+    }
     }
 
     const today = new Date();
@@ -3170,6 +3117,18 @@ function addTodayLineToTimeline(container, alocacoes) {
 
 
     // Inicialização da view inicial
+    // Configurar listeners de navegação
+    setupNavigationListeners();
+
+    // Chamar drawTimelineChart ao navegar para a Timeline
+    document.querySelectorAll('.nav-link[data-view="timeline"]').forEach(link => {
+        link.addEventListener('click', () => {
+            if (isGoogleChartsLoaded) {
+                setTimeout(() => drawTimelineChart(), 150);
+            }
+        });
+    });
+
     switchView('dashboard');
 }	
 
@@ -3177,4 +3136,4 @@ function addTodayLineToTimeline(container, alocacoes) {
 initializeFirebaseApp();
 
 // ===== FIM DA PARTE 3 =====
-// ✅ ARQUIVO app.js COMPLETO v3.1.0
+// ✅ ARQUIVO app.js COMPLETO v4.0.0
