@@ -1,6 +1,5 @@
 // ===== IMPORTAÇÕES DE MÓDULOS =====
 import { 
-    
     initializeFirebase,
     getDb,
     getAuthInstance,
@@ -57,6 +56,12 @@ import {
     getOpenedFromTimeline,
     setOpenedFromTimeline
 } from './js/core/navigation.js';
+import {
+    updateDashboard,
+    updateProfileChart,
+    updateMonthlyAvailabilityChart,
+    populateDashboardFilters
+} from './js/modules/dashboard.js';
 
 
 
@@ -85,8 +90,6 @@ async function initializeFirebaseApp() {
 
 // ===== LÓGICA PRINCIPAL DA APLICAÇÃO =====
 function initializeAppLogic() {
-    let profileChart = null;
-    let monthlyAvailabilityChart = null;
     let isGoogleChartsLoaded = false;
     // Inicializar navegação
     initializeNavigation();  
@@ -1065,50 +1068,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     // ===== POPULADORES DE FILTROS =====
     
-    function populateDashboardFilters() {
-        const times = [...new Set(getProfissionais().map(p => p.time))].sort();
-        const lideres = [...new Set(getProfissionais().map(p => p.lider))].sort();
-        
-        ['dashboard-filter-time', 'project-dashboard-filter-time'].forEach(id => {
-            const select = document.getElementById(id);
-            if (select) {
-                select.innerHTML = '<option value="">Todos os Times</option>' + 
-                    times.map(t => `<option value="${t}">${t}</option>`).join('');
-            }
-        });
-
-        ['dashboard-filter-lider', 'project-dashboard-filter-lider'].forEach(id => {
-            const select = document.getElementById(id);
-            if (select) {
-                select.innerHTML = '<option value="">Todos Líderes</option>' + 
-                    lideres.map(l => `<option value="${l}">${l}</option>`).join('');
-            }
-        });
-
-        const projetoSelect = document.getElementById('dashboard-filter-projeto');
-        if (projetoSelect) {
-            const projetos = [...getProjetos()].sort((a, b) => a.nome.localeCompare(b.nome));
-            projetoSelect.innerHTML = '<option value="">Todos Projetos</option>' +
-                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        const statusContainer = document.getElementById('project-dashboard-filter-status');
-        if (statusContainer) {
-            const statuses = ['Não Iniciado', 'Em Andamento', 'Concluído', 'Atrasado', 'Em Pausa'];
-            statusContainer.innerHTML = statuses.map(s => `
-                <label class="inline-flex items-center">
-                    <input type="checkbox" class="project-status-filter form-checkbox text-indigo-600" value="${s}">
-                    <span class="ml-2 text-sm">${s}</span>
-                </label>
-            `).join('');
-
-            document.querySelectorAll('.project-status-filter').forEach(cb => {
-                cb.addEventListener('change', () => {
-                    if (typeof updateDashboard === 'function') updateDashboard();
-                });
-            });
-        }
-    }
+    
 
     // ✅ FUNÇÃO NÃO MAIS NECESSÁRIA - Filtros agora são inputs de texto
     function populateProfissionaisFilters() {
@@ -1607,289 +1567,22 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     });
 
     // ===== GRÁFICOS =====
-
-    
-    function updateProfileChart() {
-        const canvas = document.getElementById('profile-distribution-chart');
-        if (!canvas) return;
-
-        // Não renderizar se o dashboard não estiver ativo
-        const dashboardView = document.getElementById('dashboard');
-        if (!dashboardView || !dashboardView.classList.contains('active')) return;
-
-        const profiles = {};
-        getProfissionais().filter(p => p.ativo !== 'Não').forEach(p => {
-            profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
-        });
-
-        const labels = Object.keys(profiles);
-        const data = Object.values(profiles);
-        const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
-        if (profileChart) {
-            profileChart.destroy();
-            profileChart = null;
-        }
-
-        // ✅ Forçar dimensões do container antes de criar o gráfico
-        const container = canvas.parentElement;
-        container.style.height = '320px';
-        container.style.width = '100%';
-
-        profileChart = new Chart(canvas, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: colors.slice(0, labels.length),
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: {
-                    padding: {
-                        top: 40,
-                        bottom: 40,
-                        left: 20,
-                        right: 20
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        align: 'center',
-                        labels: { 
-                            padding: 12,
-                            font: { size: 11 },
-                            boxWidth: 12,
-                            boxHeight: 12,
-                            usePointStyle: true,
-                            generateLabels: function(chart) {
-                                const data = chart.data;
-                                if (data.labels.length && data.datasets.length) {
-                                    return data.labels.map((label, i) => {
-                                        const meta = chart.getDatasetMeta(0);
-                                        const style = meta.controller.getStyle(i);
-                                        return {
-                                            text: label,
-                                            fillStyle: style.backgroundColor,
-                                            strokeStyle: style.borderColor,
-                                            lineWidth: style.borderWidth,
-                                            hidden: false,
-                                            index: i
-                                        };
-                                    });
-                                }
-                                return [];
-                            }
-                        },
-                        maxWidth: 1000,
-                        display: true
-                    },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 14 },
-                        formatter: (value) => value,
-                        anchor: 'center',
-                        align: 'center' 
-                    }
-                }
-            },
-            plugins: [ChartDataLabels]
-        });
-
-        console.log('✅ Gráfico de perfil renderizado');
-    }
-
-    function updateMonthlyAvailabilityChart() {
-    const canvas = document.getElementById('monthly-availability-chart');
-    if (!canvas) return;
-
-    // Não renderizar se o dashboard não estiver visível
-    const dashboardView = document.getElementById('dashboard');
-    if (!dashboardView || !dashboardView.classList.contains('active')) return;
+    // Inicializar seletor de mês com mês atual
     const monthSelector = document.getElementById('availability-month-selector');
-    const profFilter = document.getElementById('availability-chart-prof-filter')?.value || '';
-    const perfilFilter = document.getElementById('availability-chart-perfil-filter')?.value || '';
-
-    if (!monthSelector) return;
-
-    if (!monthSelector.value) {
+    if (monthSelector) {
         const today = new Date();
-        monthSelector.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        monthSelector.value = `${year}-${month}`;
+        
+        // Chamar função para renderizar o gráfico com mês atual
+        updateMonthlyAvailabilityChart();
     }
 
-    const [year, month] = monthSelector.value.split('-');
-    const firstDay = new Date(parseInt(year), parseInt(month) - 1, 1);
-    const lastDay = new Date(parseInt(year), parseInt(month), 0);
-
-    let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
-    if (profFilter) profissionais = profissionais.filter(p => p.id === profFilter);
-    if (perfilFilter) profissionais = profissionais.filter(p => p.perfil === perfilFilter);
-
-    profissionais.sort((a, b) => a.nome.localeCompare(b.nome));
-
-    const labels = profissionais.map(p => p.nome);
-    const horasAlocadas = profissionais.map(prof => {
-        const alocacoes = getAlocacoes().filter(a => {
-            if (a.profissionalId !== prof.id) return false;
-            const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-            const alocFim = new Date(a.dataFim + 'T00:00:00');
-            return alocInicio <= lastDay && alocFim >= firstDay;
-        });
-
-        return alocacoes.reduce((sum, a) => {
-            const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-            const alocFim = new Date(a.dataFim + 'T00:00:00');
-            const inicio = alocInicio < firstDay ? firstDay : alocInicio;
-            const fim = alocFim > lastDay ? lastDay : alocFim;
-            
-            const diasUteis = calcularDiasUteis(
-                inicio.toISOString().split('T')[0],
-                fim.toISOString().split('T')[0]
-            );
-            
-            return sum + (diasUteis * ((parseFloat(a.percentual) || 0) / 100) * 8);
-        }, 0);
-    });
-
-    if (monthlyAvailabilityChart) monthlyAvailabilityChart.destroy();
-
-    // ✅ FIX: Sempre resetar e recalcular altura antes de criar novo gráfico
-    const minHeight = 500;
-    const pixelsPorProfissional = 45;
-    const alturaCalculada = Math.max(minHeight, profissionais.length * pixelsPorProfissional);
-    
-    // ✅ FIX: Limpar estilo anterior e aplicar novo
-    canvas.style.removeProperty('height');
-    canvas.height = alturaCalculada;
-    canvas.style.height = `${alturaCalculada}px`;
-
-    // ✅ FIX: Garantir que o container pai não tenha altura fixa
-    const container = canvas.parentElement;
-    if (container) {
-        container.style.removeProperty('height');
-        container.style.height = 'auto';
-    }
-
-    monthlyAvailabilityChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Horas Alocadas',
-                data: horasAlocadas,
-                backgroundColor: '#4f46e5',
-                borderColor: '#4338ca',
-                borderWidth: 1,
-                barThickness: 'flex',
-                maxBarThickness: 35,  // ✅ REDUZIDO de 40 para 35
-                categoryPercentage: 0.7,  // ✅ ADICIONADO - Controla espaço a área de cada barra
-                barPercentage: 0.5        // ✅ ADICIONADO - Controla largura da barra
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    left: 20,    // ✅ AUMENTADO de 15 para 20
-                    right: 40,   // ✅ AUMENTADO de 30 para 40
-                    top: 20,     // ✅ AUMENTADO de 15 para 20
-                    bottom: 20   // ✅ AUMENTADO de 15 para 20
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    anchor: 'end',
-                    align: 'end',
-                    offset: 4,
-                    formatter: (value) => value > 0 ? `${Math.round(value)}h` : '',
-                    font: { 
-                        weight: 'bold', 
-                        size: 11  // ✅ Fonte
-                    },
-                    color: '#1f2937'
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `${Math.round(context.parsed.x)}h alocadas`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    ticks: { 
-                        callback: (value) => `${value}h`,
-                        font: { size: 10 }  // ✅ REDUZIDO de 11 para 10
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    }
-                },
-                y: {
-                    ticks: {
-                        autoSkip: false,
-                        font: { 
-                            size: 11  // ✅ Mudou de 10 para 11
-                        },
-                        padding: 15,  // ✅ Mudou de 10 para 15
-                        color: '#374151',
-                        // ✅ TRUNCAR NOMES LONGOS
-                        callback: function(value, index) {
-                            const label = this.getLabelForValue(value);
-                            if (label.length > 30) {
-                                return label.substring(0, 27) + '...';
-                            }
-                            return label;
-                        }
-                    },
-                    grid: {
-                        display: false
-                    }
-                }
-            }
-        },
-        plugins: [ChartDataLabels]
-    });
-	setTimeout(() => {
-        if (monthlyAvailabilityChart) {
-            monthlyAvailabilityChart.resize();
-            monthlyAvailabilityChart.update('none'); // Update sem animação
-        }
-    }, 150);
-	
-
-    // ✅ MENSAGEM SE MUITOS PROFISSIONAIS
-    const messageDiv = document.getElementById('chart-info-message');
-    if (messageDiv) {
-        messageDiv.remove();
-    }
-
-    if (profissionais.length > 50) {
-        const infoMessage = document.createElement('div');
-        infoMessage.id = 'chart-info-message';
-        infoMessage.className = 'bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3 text-sm text-blue-800';
-        infoMessage.innerHTML = `
-            <strong>💡 Dica:</strong> Há ${profissionais.length} profissionais no gráfico. 
-            Use os filtros acima para visualizar grupos menores e facilitar a leitura.
-        `;
-        canvas.parentElement.appendChild(infoMessage);
-    }
-}
-
-    document.getElementById('availability-month-selector')?.addEventListener('change', updateMonthlyAvailabilityChart);
-    document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
-    document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
+// Listeners para atualização do gráfico
+document.getElementById('availability-month-selector')?.addEventListener('change', updateMonthlyAvailabilityChart);
+document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
+document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
 
     
     // ===== BUSCA DE DISPONIBILIDADE =====
