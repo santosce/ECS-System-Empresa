@@ -71,6 +71,14 @@ import {
     populateProfissionaisFilters,
     initializeProfessionalsModule
 } from './js/modules/professionals.js';
+import {
+    renderProjetos,
+    openProjetoModal,
+    closeProjetoModal,
+    saveProjeto,
+    deleteProjeto,
+    initializeProjectsModule
+} from './js/modules/projects.js';
 
 
 
@@ -103,7 +111,9 @@ function initializeAppLogic() {
     // Inicializar navegação
     initializeNavigation();
     // Inicializar módulo de profissionais
-    initializeProfessionalsModule();  
+    initializeProfessionalsModule();
+   // Inicializar módulo de projetos
+    initializeProjectsModule(); 
     
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -380,12 +390,10 @@ function clearFirestoreListeners() {
 
     // ===== MODAIS =====
     const modals = {
-        projeto: document.getElementById('projeto-modal'),
         alocacao: document.getElementById('alocacao-modal'),
     };
     
     const forms = {
-        projeto: document.getElementById('projeto-form'),
         alocacao: document.getElementById('alocacao-form'),
     };
 
@@ -732,46 +740,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     // ===== FUNÇÕES DE RENDERIZAÇÃO (ESTAVAM FALTANDO!) =====
     
-    function renderProjetos() {
-        const tbody = document.getElementById('projetos-table-body');
-        if (!tbody) return;
-
-        // Filtros
-        const filterNome = document.getElementById('projetos-filter-nome')?.value.toLowerCase() || '';
-        const filterCliente = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
-        const filterStatus = document.getElementById('projetos-filter-status')?.value || '';
-
-        let filtered = getProjetos();
-        if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
-        if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
-        if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
-        
-        // ✅ ORDENAR ALFABETICAMENTE POR NOME
-        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
-
-        const rows = filtered.map(proj => `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${proj.nome}</td>
-                <td class="px-6 py-4">${proj.cliente || 'N/A'}</td>
-                <td class="px-6 py-4">${proj.tipo}</td>
-                <td class="px-6 py-4">${formatDate(proj.inicioPrevisto)}</td>
-                <td class="px-6 py-4">${formatDate(proj.fimPrevisto)}</td>
-                <td class="px-6 py-4">${proj.horasEstimadasProjeto || 0}h</td>
-                <td class="px-6 py-4">
-                    <span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(proj.status)}">
-                        ${proj.status}
-                    </span>
-                </td>
-                <td class="px-6 py-4">
-                    <button onclick="window.editProjeto('${proj.id}')" class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">Editar</button>
-                    <button onclick="window.deleteProjeto('${proj.id}')" class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
-                </td>
-            </tr>
-        `).join('');
-
-        tbody.innerHTML = rows || '<tr><td colspan="8" class="text-center p-4">Nenhum projeto cadastrado.</td></tr>';
-    }
-
     function renderAlocacoes() {
         const tbody = document.getElementById('alocacoes-table-body');
         if (!tbody) return;
@@ -868,22 +836,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     // ===== FUNÇÕES GLOBAIS PARA OS BOTÕES =====
     
-    window.editProjeto = async (id) => {
-        const proj = getProjetos().find(p => p.id === id);
-        if (proj) openProjetoModal(proj);
-    };
-
-    window.deleteProjeto = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este projeto?')) return;
-        try {
-            await deleteDoc(doc(getDb(), getCollectionPath('projetos'), id));
-            showNotification('Projeto excluído com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao excluir:', error);
-            showNotification('Erro ao excluir projeto', 'error');
-        }
-    };
-
     window.editAlocacao = async (id) => {
         const aloc = getAlocacoes().find(a => a.id === id);
         if (aloc) openAlocacaoModal(aloc);
@@ -948,7 +900,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 		if (!user) return;
 
 		// Prevenir exclusão do próprio usuário usando getAuthInstance().currentUser
-		if (userId === augetAuthInstance().currentUser?.uid) {
+		if (userId === getAuthInstance().currentUser?.uid) {
 			showNotification('Você não pode excluir seu próprio usuário!', 'warning');
 			return;
 		}
@@ -1485,6 +1437,9 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             }
         }
     });
+
+    // Listener delegado para checkboxes de status (criados dinamicamente)
+    document.getElementById('project-dashboard-filter-status')?.addEventListener('change', updateDashboard);
 
     // ===== GRÁFICOS =====
     // Inicializar seletor de mês com mês atual

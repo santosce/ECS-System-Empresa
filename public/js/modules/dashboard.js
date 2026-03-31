@@ -303,8 +303,70 @@ function updateDashboardTotals() {
 
 // ===== POPULAR FILTROS DO DASHBOARD =====
 export function populateDashboardFilters() {
-    // Implementar se houver filtros específicos do dashboard
-    console.log('📋 Populando filtros do dashboard');
+    const profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
+    const projetos = getProjetos();
+
+    const times   = [...new Set(profissionais.map(p => p.time).filter(Boolean))].sort();
+    const lideres = [...new Set(profissionais.map(p => p.lider).filter(Boolean))].sort();
+    const statuses = [...new Set(projetos.map(p => p.status).filter(Boolean))].sort();
+
+    // ── Por Profissional ──────────────────────────────────────────
+    const elTime = document.getElementById('dashboard-filter-time');
+    if (elTime) {
+        const cur = elTime.value;
+        elTime.innerHTML = '<option value="">Todos os Times</option>' +
+            times.map(t => `<option value="${t}">${t}</option>`).join('');
+        elTime.value = cur;
+    }
+
+    const elLider = document.getElementById('dashboard-filter-lider');
+    if (elLider) {
+        const cur = elLider.value;
+        elLider.innerHTML = '<option value="">Todos Líderes</option>' +
+            lideres.map(l => `<option value="${l}">${l}</option>`).join('');
+        elLider.value = cur;
+    }
+
+    const elProjeto = document.getElementById('dashboard-filter-projeto');
+    if (elProjeto) {
+        const cur = elProjeto.value;
+        elProjeto.innerHTML = '<option value="">Todos Projetos</option>' +
+            projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        elProjeto.value = cur;
+    }
+
+    // ── Por Projeto ───────────────────────────────────────────────
+    const elProjTime = document.getElementById('project-dashboard-filter-time');
+    if (elProjTime) {
+        const cur = elProjTime.value;
+        elProjTime.innerHTML = '<option value="">Todos Times</option>' +
+            times.map(t => `<option value="${t}">${t}</option>`).join('');
+        elProjTime.value = cur;
+    }
+
+    const elProjLider = document.getElementById('project-dashboard-filter-lider');
+    if (elProjLider) {
+        const cur = elProjLider.value;
+        elProjLider.innerHTML = '<option value="">Todos Líderes</option>' +
+            lideres.map(l => `<option value="${l}">${l}</option>`).join('');
+        elProjLider.value = cur;
+    }
+
+    // Checkboxes de status (preserva os que estavam marcados)
+    const statusContainer = document.getElementById('project-dashboard-filter-status');
+    if (statusContainer) {
+        const marcados = new Set(
+            Array.from(statusContainer.querySelectorAll('.project-status-filter:checked')).map(cb => cb.value)
+        );
+        statusContainer.innerHTML = statuses.map(s => `
+            <label class="flex items-center gap-1 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" class="project-status-filter" value="${s}" ${marcados.has(s) ? 'checked' : ''}>
+                ${s}
+            </label>
+        `).join('');
+    }
+
+    console.log('📋 Filtros do dashboard populados');
 }
 
 // ===== EXPORT DEFAULT =====
