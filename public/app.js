@@ -62,6 +62,15 @@ import {
     updateMonthlyAvailabilityChart,
     populateDashboardFilters
 } from './js/modules/dashboard.js';
+import {
+    renderProfissionais,
+    openProfissionalModal,
+    closeProfissionalModal,
+    saveProfissional,
+    deleteProfissional,
+    populateProfissionaisFilters,
+    initializeProfessionalsModule
+} from './js/modules/professionals.js';
 
 
 
@@ -92,7 +101,9 @@ async function initializeFirebaseApp() {
 function initializeAppLogic() {
     let isGoogleChartsLoaded = false;
     // Inicializar navegação
-    initializeNavigation();  
+    initializeNavigation();
+    // Inicializar módulo de profissionais
+    initializeProfessionalsModule();  
     
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -369,13 +380,11 @@ function clearFirestoreListeners() {
 
     // ===== MODAIS =====
     const modals = {
-        profissional: document.getElementById('profissional-modal'),
         projeto: document.getElementById('projeto-modal'),
         alocacao: document.getElementById('alocacao-modal'),
     };
     
     const forms = {
-        profissional: document.getElementById('profissional-form'),
         projeto: document.getElementById('projeto-form'),
         alocacao: document.getElementById('alocacao-form'),
     };
@@ -594,7 +603,6 @@ function clearFirestoreListeners() {
         modal.classList.remove('hidden');
     }
 
-    const openProfissionalModal = (data) => openModal('profissional', data);
     const openProjetoModal = (data) => openModal('projeto', data);
     const openAlocacaoModal = (data) => {
         setOpenedFromTimeline(false);
@@ -622,35 +630,7 @@ function clearFirestoreListeners() {
 
     // ===== HANDLERS DOS FORMULÁRIOS =====
     
-    // Form: Profissional
-    forms.profissional?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('profissional-id').value;
-        const data = {
-            nome: document.getElementById('nome').value,
-            perfil: document.getElementById('perfil').value,
-            time: document.getElementById('time').value,
-            empresa: document.getElementById('empresa').value,
-            lider: document.getElementById('lider').value,
-            faturado: document.getElementById('faturado').value,
-            senioridade: document.getElementById('senioridade').value,
-            ativo: document.getElementById('ativo').value
-        };
-
-        try {
-            if (id) {
-                await setDoc(doc(getDb(), getCollectionPath('profissionais'), id), data);
-                showNotification('Profissional atualizado com sucesso!', 'success');
-            } else {
-                await addDoc(collection(getDb(), getCollectionPath('profissionais')), data);
-                showNotification('Profissional adicionado com sucesso!', 'success');
-            }
-            closeModal();
-        } catch (error) {
-            console.error('Erro ao salvar profissional:', error);
-            showNotification('Erro ao salvar profissional', 'error');
-        }
-    });
+       
 
     // Form: Projeto
     forms.projeto?.addEventListener('submit', async (e) => {
@@ -752,45 +732,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 
     // ===== FUNÇÕES DE RENDERIZAÇÃO (ESTAVAM FALTANDO!) =====
     
-    function renderProfissionais() {
-        const tbody = document.getElementById('profissionais-table-body');
-        if (!tbody) return;
-
-        const filterNome = document.getElementById('profissionais-filter-nome')?.value.toLowerCase() || '';
-        const filterPerfil = document.getElementById('profissionais-filter-perfil')?.value.toLowerCase() || '';
-        const filterTime = document.getElementById('profissionais-filter-time')?.value.toLowerCase() || '';
-        const filterEmpresa = document.getElementById('profissionais-filter-empresa')?.value.toLowerCase() || '';
-
-
-        let filtered = getProfissionais();
-        if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
-        if (filterPerfil) filtered = filtered.filter(p => p.perfil.toLowerCase().includes(filterPerfil));
-        if (filterTime) filtered = filtered.filter(p => p.time.toLowerCase().includes(filterTime));
-        if (filterEmpresa) filtered = filtered.filter(p => p.empresa.toLowerCase().includes(filterEmpresa));
-
-        // ✅ ORDENAR ALFABETICAMENTE POR NOME
-        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
-        
-        const rows = filtered.map(prof => `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
-                <td class="px-6 py-4">${prof.perfil}</td>
-                <td class="px-6 py-4">${prof.time}</td>
-                <td class="px-6 py-4">${prof.empresa}</td>
-                <td class="px-6 py-4">${prof.lider}</td>
-                <td class="px-6 py-4">${prof.faturado}</td>
-                <td class="px-6 py-4">${prof.senioridade || 'N/A'}</td>
-                <td class="px-6 py-4">${prof.ativo}</td>
-                <td class="px-6 py-4">
-                    <button onclick="window.editProfissional('${prof.id}')" class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">Editar</button>
-                    <button onclick="window.deleteProfissional('${prof.id}')" class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
-                </td>
-            </tr>
-        `).join('');
-
-        tbody.innerHTML = rows || '<tr><td colspan="8" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-    }
-
     function renderProjetos() {
         const tbody = document.getElementById('projetos-table-body');
         if (!tbody) return;
@@ -926,22 +867,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
 }
 
     // ===== FUNÇÕES GLOBAIS PARA OS BOTÕES =====
-    window.editProfissional = async (id) => {
-        const prof = getProfissionais().find(p => p.id === id);
-        if (prof) openProfissionalModal(prof);
-    };
-
-    window.deleteProfissional = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
-        try {
-            await deleteDoc(doc(getDb(), getCollectionPath('profissionais'), id));
-            showNotification('Profissional excluído com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao excluir:', error);
-            showNotification('Erro ao excluir profissional', 'error');
-        }
-    };
-
+    
     window.editProjeto = async (id) => {
         const proj = getProjetos().find(p => p.id === id);
         if (proj) openProjetoModal(proj);
@@ -1069,12 +995,6 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     // ===== POPULADORES DE FILTROS =====
     
     
-
-    // ✅ FUNÇÃO NÃO MAIS NECESSÁRIA - Filtros agora são inputs de texto
-    function populateProfissionaisFilters() {
-        // Removido: Time e Empresa agora são campos de texto, não dropdowns
-    }
-
     function populateAvailabilityChartFilters() {
         const profSelect = document.getElementById('availability-chart-prof-filter');
         const perfilSelect = document.getElementById('availability-chart-perfil-filter');
