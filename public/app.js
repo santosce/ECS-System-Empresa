@@ -2,7 +2,6 @@
 import { 
     initializeFirebase,
     getDb,
-    getAuthInstance,
     getProvider,
     getAppId,
     signInWithPopup,
@@ -12,7 +11,6 @@ import {
     onSnapshot,
     doc,
     setDoc,
-    deleteDoc,
     getDoc,
     getDocs
 } from './js/config/firebase-config.js';
@@ -23,7 +21,6 @@ import appState, {
     setProjetos,
     getAlocacoes,
     setAlocacoes,
-    getUsers,
     setUsers,
     getProfissionalById,
     getProjetoById,
@@ -85,6 +82,14 @@ import {
     populateAlocacoesFilters,
     initializeAllocationsModule
 } from './js/modules/allocations.js';
+import {
+    renderUsersTable,
+    openUserModal,
+    closeUserModal,
+    saveUser,
+    deleteUser,
+    initializeUsersModule
+} from './js/modules/users.js';
 
 
 
@@ -122,6 +127,8 @@ function initializeAppLogic() {
     initializeProjectsModule();
     // Inicializar módulo de alocações
     initializeAllocationsModule();
+    // Inicializar módulo de usuários
+    initializeUsersModule();
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -329,117 +336,6 @@ function clearFirestoreListeners() {
         }
     });
 });
-
-   function renderUsersTable() {
-    const tbody = document.getElementById('users-table-body');
-    if (!tbody) return;
-
-    const rows = getUsers().map(user => {
-        const isActive = user.active !== false; // Default true se não definido
-        const statusBadge = isActive 
-            ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Ativo</span>'
-            : '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Inativo</span>';
-
-        return `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${user.name || user.email}</td>
-                <td class="px-6 py-4">${user.email}</td>
-                <td class="px-6 py-4">
-                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                        ${(user.role || 'viewer').charAt(0).toUpperCase() + (user.role || 'viewer').slice(1)}
-                    </span>
-                </td>
-                <td class="px-6 py-4">${statusBadge}</td>
-                <td class="px-6 py-4 space-x-2">
-                    <button onclick="window.changeUserRole('${user.id}')" class="text-indigo-600 hover:text-indigo-900 font-medium">
-                        Alterar Papel
-                    </button>
-                    <button onclick="window.toggleUserStatus('${user.id}', ${!isActive})" class="text-${isActive ? 'orange' : 'green'}-600 hover:text-${isActive ? 'orange' : 'green'}-900 font-medium">
-                        ${isActive ? 'Inativar' : 'Ativar'}
-                    </button>
-                    <button onclick="window.deleteUser('${user.id}')" class="text-red-600 hover:text-red-900 font-medium">
-                        Excluir
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-
-    tbody.innerHTML = rows || '<tr><td colspan="5" class="text-center p-4">Nenhum usuário cadastrado.</td></tr>';
-}
-
-    // ===== FUNÇÕES GLOBAIS PARA OS BOTÕES =====
-
-    window.changeUserRole = async (userId) => {
-        const user = getUsers().find(u => u.id === userId);
-        if (!user) return;
-
-        const newRole = prompt(`Alterar papel de ${user.name}:\n\nDigite 'admin', 'editor' ou 'viewer':`, user.role);
-        if (!newRole || !['admin', 'editor', 'viewer'].includes(newRole)) {
-            showNotification('Papel inválido!', 'warning');
-            return;
-        }
-
-        try {
-            await setDoc(doc(getDb(), getCollectionPath('users'), userId), { ...user, role: newRole });
-            showNotification('Papel alterado com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao alterar papel:', error);
-            showNotification('Erro ao alterar papel', 'error');
-        }
-    };
-	// ✅ Função para alternar status do usuário (Ativar/Inativar)
-	window.toggleUserStatus = async (userId, newStatus) => {
-		const user = getUsers().find(u => u.id === userId);
-		if (!user) return;
-
-		const action = newStatus ? 'ativar' : 'inativar';
-		
-		if (!confirm(`Tem certeza que deseja ${action} o usuário ${user.name || user.email}?`)) {
-			return;
-		}
-
-		try {
-			await setDoc(doc(getDb(), getCollectionPath('users'), userId), {
-				...user,
-				active: newStatus
-			});
-			showNotification(`Usuário ${newStatus ? 'ativado' : 'inativado'} com sucesso!`, 'success');
-		} catch (error) {
-			console.error('Erro ao alterar status:', error);
-			showNotification('Erro ao alterar status do usuário', 'error');
-		}
-	};
-
-// ✅ Função para excluir usuário
-// ✅ Versão alternativa se getCurrentUserId() não estiver acessível
-	window.deleteUser = async (userId) => {
-		const user = getUsers().find(u => u.id === userId);
-		if (!user) return;
-
-		// Prevenir exclusão do próprio usuário usando getAuthInstance().currentUser
-		if (userId === getAuthInstance().currentUser?.uid) {
-			showNotification('Você não pode excluir seu próprio usuário!', 'warning');
-			return;
-		}
-
-		const confirmText = `ATENÇÃO: Tem certeza que deseja EXCLUIR permanentemente o usuário ${user.name || user.email}?\n\nEsta ação não pode ser desfeita!\n\nDigite "EXCLUIR" para confirmar:`;
-		
-		const confirmation = prompt(confirmText);
-		
-		if (confirmation !== 'EXCLUIR') {
-			showNotification('Exclusão cancelada', 'info');
-			return;
-		}
-
-		try {
-			await deleteDoc(doc(getDb(), getCollectionPath('users'), userId));
-			showNotification('Usuário excluído com sucesso!', 'success');
-		} catch (error) {
-			console.error('Erro ao excluir usuário:', error);
-			showNotification('Erro ao excluir usuário', 'error');
-		}
-	};
 
     // Event listeners de filtros
     document.getElementById('profissionais-filter-nome')?.addEventListener('input', debounce(renderProfissionais, 300));
