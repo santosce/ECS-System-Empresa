@@ -84,9 +84,12 @@ function populateAlocacaoDropdowns() {
     profSelect.innerHTML = '<option value="">Selecione um profissional</option>';
     projSelect.innerHTML = '<option value="">Selecione um projeto</option>';
 
-    const activeProfessionals = getProfissionais().filter(p => p.ativo !== 'Não');
+    const activeProfessionals = getProfissionais()
+        .filter(p => p.ativo !== 'Não')
+        .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     activeProfessionals.forEach(p => profSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
-    getProjetos().forEach(p => projSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
+    const projetos = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    projetos.forEach(p => projSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
 }
 
 // ===== CÁLCULO DE HORAS ESTIMADAS =====

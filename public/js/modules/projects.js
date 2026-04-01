@@ -4,7 +4,7 @@
 
 import { getDb } from '../config/firebase-config.js';
 import { getProjetos } from '../state/app-state.js';
-import { showNotification, getCollectionPath } from '../core/utils.js';
+import { showNotification, getCollectionPath, formatDate } from '../core/utils.js';
 import { isAdmin, isEditor } from '../core/auth.js';
 
 // Importações Firebase
@@ -36,7 +36,7 @@ export function renderProjetos() {
     const clienteFilter = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
     const statusFilter  = document.getElementById('projetos-filter-status')?.value || '';
 
-    let projetosFiltrados = getProjetos();
+    let projetosFiltrados = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
     if (nomeFilter) {
         projetosFiltrados = projetosFiltrados.filter(p =>
@@ -66,8 +66,8 @@ export function renderProjetos() {
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${proj.nome || '—'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${proj.cliente || '—'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${proj.tipo || '—'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${proj.inicioPrevisto || '—'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${proj.fimPrevisto || '—'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatDate(proj.inicioPrevisto) || '—'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatDate(proj.fimPrevisto) || '—'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${proj.horasEstimadasProjeto || '—'}</td>
             <td class="px-6 py-4 whitespace-nowrap">${getStatusBadge(proj.status)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

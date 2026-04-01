@@ -26,7 +26,7 @@ export function renderProfissionais() {
         if (filterTime    && !(p.time    || '').toLowerCase().includes(filterTime))    return false;
         if (filterEmpresa && !(p.empresa || '').toLowerCase().includes(filterEmpresa)) return false;
         return true;
-    });
+    }).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
     tbody.innerHTML = profissionaisFiltrados.map(prof => `
         <tr class="border-b hover:bg-gray-50">

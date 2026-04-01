@@ -739,8 +739,8 @@ function clearFirestoreListeners() {
         // ✅ APLICAR FILTRO
         const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
 
-        let filtered = getProjetos();
-        
+        let filtered = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
         // Filtro por nome do projeto
         if (filterProjeto) {
             filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
