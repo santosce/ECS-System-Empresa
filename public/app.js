@@ -90,6 +90,11 @@ import {
     deleteUser,
     initializeUsersModule
 } from './js/modules/users.js';
+import {
+    drawTimelineChart,
+    populateTimelineFilters,
+    initializeTimelineModule
+} from './js/modules/timeline.js';
 
 
 
@@ -129,6 +134,8 @@ function initializeAppLogic() {
     initializeAllocationsModule();
     // Inicializar módulo de usuários
     initializeUsersModule();
+    // Inicializar módulo de timeline
+    initializeTimelineModule();
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -212,7 +219,7 @@ function setupFirestoreListeners() {
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
         if (typeof populateAvailabilityChartFilters === 'function') populateAvailabilityChartFilters();
         if (typeof populateProfileFilters === 'function') populateProfileFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
         if (typeof populateProfissionaisFilters === 'function') populateProfissionaisFilters();
     });
     firestoreUnsubscribers.push(unsubProf);
@@ -223,7 +230,7 @@ function setupFirestoreListeners() {
         if (typeof renderProjetos === 'function') renderProjetos();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
     });
     firestoreUnsubscribers.push(unsubProj);
 
@@ -233,7 +240,7 @@ function setupFirestoreListeners() {
         if (typeof renderAlocacoes === 'function') renderAlocacoes();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
         
         setTimeout(() => {
             if (typeof updateMonthlyAvailabilityChart === 'function') {
@@ -386,43 +393,6 @@ function clearFirestoreListeners() {
         }
     }
 
-    function populateTimelineFilters() {
-        const profSelect = document.getElementById('timeline-filter-profissional');
-        const projSelect = document.getElementById('timeline-filter-projeto');
-        const perfilSelect = document.getElementById('timeline-filter-perfil');
-
-        if (profSelect) {
-            // ✅ Filtrar apenas profissionais ATIVOS e ordenar alfabeticamente
-            const profissionaisAtivosOrdenados = [...getProfissionais()]
-                .filter(p => p.ativo !== 'Não' && p.nome) // Apenas ativos com nome válido
-                .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-            profSelect.innerHTML = '<option value="">Todos</option>' +
-                profissionaisAtivosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (projSelect) {
-            const projetosOrdenados = [...getProjetos()].sort((a, b) => a.nome.localeCompare(b.nome));
-            projSelect.innerHTML = '<option value="">Todos</option>' +
-                projetosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (perfilSelect) {
-            // ✅ Filtrar perfis apenas de profissionais ATIVOS
-            const perfis = [...new Set(getProfissionais()
-                .filter(p => p.ativo !== 'Não')
-                .map(p => p.perfil)
-                .filter(pf => pf) // Remover undefined/null
-            )].sort();
-            perfilSelect.innerHTML = '<option value="">Todos</option>' +
-                perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
-        }
-
-        [profSelect, projSelect, perfilSelect].forEach(select => {
-            select?.addEventListener('change', () => {
-                if (isGoogleChartsLoaded) drawTimelineChart();
-            });
-        });
-    }
 
 // ===== FIM DA PARTE 2 =====
 // ===== PARTE 3 - DASHBOARD, GRÁFICOS E TIMELINE =====
@@ -1135,361 +1105,6 @@ document.getElementById('availability-chart-perfil-filter')?.addEventListener('c
     });
    
 
-    // ===== TIMELINE =====
-window.drawTimelineChart = drawTimelineChart;
-function drawTimelineChart() {
-    const container = document.getElementById('timeline-chart-container');
-    if (!container || !isGoogleChartsLoaded) return;
-
-    const filterProf = document.getElementById('timeline-filter-profissional')?.value || '';
-    const filterProj = document.getElementById('timeline-filter-projeto')?.value || '';
-    const filterPerfil = document.getElementById('timeline-filter-perfil')?.value || '';
-
-    let alocacoes = getAlocacoes().filter(a => {
-        // ✅ Buscar profissional para validações
-        const prof = getProfissionais().find(p => p.id === a.profissionalId);
-
-        // ✅ FILTRO 1: Apenas profissionais ATIVOS e com nome válido
-        if (!prof || prof.ativo === 'Não' || !prof.nome) return false;
-
-        if (filterProf && a.profissionalId !== filterProf) return false;
-        if (filterProj && a.projetoId !== filterProj) return false;
-
-        if (filterPerfil) {
-            if (prof.perfil !== filterPerfil) return false;
-        }
-
-        return true;
-    });
-
-    // ✅ ORDENAR alocações por nome do profissional (alfabeticamente)
-    alocacoes.sort((a, b) => {
-        const profA = getProfissionais().find(p => p.id === a.profissionalId);
-        const profB = getProfissionais().find(p => p.id === b.profissionalId);
-        return (profA?.nome || '').localeCompare(profB?.nome || '');
-    });
-
-    if (alocacoes.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 pt-16">Nenhuma alocação encontrada para os filtros selecionados.</p>';
-        return;
-    }
-
-    const dataTable = new google.visualization.DataTable();
-    dataTable.addColumn({ type: 'string', id: 'Resource' });
-    dataTable.addColumn({ type: 'string', id: 'Name' });
-    dataTable.addColumn({ type: 'string', role: 'tooltip', p: { html: true } });
-    dataTable.addColumn({ type: 'date', id: 'Start' });
-    dataTable.addColumn({ type: 'date', id: 'End' });
-    dataTable.addColumn({ type: 'string', role: 'style' });
-
-    // ✅ ADICIONAR LINHA INVISÍVEL PARA FORÇAR "HOJE" NO RANGE
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    // ✅ Linha invisível com caractere zero-width space (invisível)
-    const invisibleChar = '\u200B'; // Zero-Width Space - caractere Unicode invisível
-    dataTable.addRow([
-        invisibleChar, // Resource invisível
-        invisibleChar, // Name invisível
-        '', // Tooltip vazio
-        today, // Start = hoje
-        todayEnd, // End = hoje (mesmo dia)
-        'opacity: 0; height: 0;' // ✅ INVISÍVEL
-    ]);
-
-    console.log('📅 Linha invisível adicionada para forçar "hoje" no range:', today.toLocaleDateString());
-
-    // Adicionar as alocações normais
-    alocacoes.forEach(aloc => {
-        const prof = getProfissionais().find(p => p.id === aloc.profissionalId);
-        const proj = getProjetos().find(p => p.id === aloc.projetoId);
-
-        // ✅ Validar profissional, projeto e nomes (evitar "undefined")
-        if (!prof || !proj) return;
-        if (!prof.nome || !proj.nome) return;
-
-        const profNome = prof.nome;
-        const projNome = proj.nome;
-        const inicio = new Date(aloc.dataInicio + 'T00:00:00');
-        const fim = new Date(aloc.dataFim + 'T00:00:00');
-
-        const tooltip = `
-            <div style="padding: 10px; font-family: Arial, sans-serif;">
-                <strong>${profNome}</strong><br/>
-                <strong>Projeto:</strong> ${projNome}<br/>
-                <strong>Período:</strong> ${formatDate(aloc.dataInicio)} - ${formatDate(aloc.dataFim)}<br/>
-                <strong>Alocação:</strong> ${aloc.percentual}%<br/>
-                <strong>Horas:</strong> ${aloc.horasEstimadas || 0}h estimadas / ${aloc.horasRealizadas || 0}h realizadas
-            </div>
-        `;
-
-        dataTable.addRow([
-            profNome, 
-            projNome, 
-            tooltip, 
-            inicio, 
-            fim,
-            null // Sem estilo especial (visível normalmente)
-        ]);
-    });
-
-    const options = {
-        timeline: {
-            showRowLabels: true,
-            showBarLabels: true,
-            groupByRowLabel: true,
-            colorByRowLabel: false
-        },
-        avoidOverlappingGridLines: false,
-        tooltip: { isHtml: true },
-        backgroundColor: '#ffffff',
-        height: Math.max(600, (alocacoes.length + 1) * 50) // +1 pela linha invisível
-    };
-
-    container.innerHTML = '';
-    const chart = new google.visualization.Timeline(container);
-    
-    google.visualization.events.addListener(chart, 'select', function() {
-        const selection = chart.getSelection();
-        if (selection.length > 0) {
-            const row = selection[0].row;
-            // ✅ Ignorar a primeira linha (invisível)
-            if (row === 0) return;
-            
-            const alocacao = alocacoes[row - 1]; // -1 porque a primeira é invisível
-            if (alocacao) {
-                setOpenedFromTimeline(true);
-                openAlocacaoModal(alocacao);
-            }
-        }
-    });
-
-    chart.draw(dataTable, options);
-
-    // ✅ OCULTAR LINHA "undefined" após renderização
-    function hideUndefinedLabel() {
-        const svg = container.querySelector('svg');
-        if (!svg) return;
-
-        const textElements = svg.querySelectorAll('text');
-        textElements.forEach(text => {
-            const content = text.textContent?.trim();
-            if (content === 'undefined' || content === '' || !content) {
-                // Ocultar o texto "undefined" ou vazio
-                text.textContent = '';
-                text.style.visibility = 'hidden';
-            }
-        });
-
-        // ✅ Também ocultar a primeira linha da tabela se for a invisível
-        const rows = svg.querySelectorAll('g > rect');
-        if (rows.length > 0) {
-            const firstRowRect = rows[0];
-            if (firstRowRect && firstRowRect.getAttribute('fill') === 'none') {
-                firstRowRect.style.display = 'none';
-            }
-        }
-
-        console.log('✅ Label "undefined" ocultado do gráfico');
-    }
-
-    setTimeout(hideUndefinedLabel, 100);
-    setTimeout(hideUndefinedLabel, 300);
-    setTimeout(hideUndefinedLabel, 600);
-
-    // ✅ SEMPRE ADICIONAR LINHA "HOJE"
-    console.log('⏳ Aguardando renderização do gráfico...');
-    setTimeout(() => {
-        addTodayLineToTimeline(container, alocacoes);
-    }, 500);
-}
-// Contador de tentativas para evitar loop infinito - Timeline
-let todayLineRetries = 0;
-const MAX_RETRIES_TIMELINE = 10;
-function addTodayLineToTimeline(container, alocacoes) {
-    const svg = container.querySelector('svg');
-    if (!svg) {
-    if (todayLineRetries < MAX_RETRIES_TIMELINE) {
-        console.log('⏳ SVG não encontrado, tentando novamente...');
-        todayLineRetries++;
-        setTimeout(() => addTodayLineToTimeline(container, alocacoes), 300);
-        return;
-    } else {
-        console.log('⚠ SVG timeline não encontrado após máximo de tentativas');
-        todayLineRetries = 0;
-        return;
-    }
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Remover linha antiga se existir
-    const oldLine = svg.querySelector('.today-line');
-    if (oldLine) oldLine.remove();
-
-    // ✅ ESTRATÉGIA: Usar labels do eixo X para calcular escala precisa
-    const textElements = svg.querySelectorAll('text');
-    const monthMap = { 'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
-                       'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11 };
-
-    // Coletar labels de mês e ano
-    const axisLabels = [];
-    let lastYear = new Date().getFullYear();
-
-    textElements.forEach(text => {
-        const content = text.textContent.trim();
-        const x = parseFloat(text.getAttribute('x'));
-        if (isNaN(x)) return;
-
-        // Verificar se é um ano (ex: "2025", "2026")
-        if (/^\d{4}$/.test(content)) {
-            lastYear = parseInt(content);
-            axisLabels.push({ x, type: 'year', year: lastYear });
-        }
-
-        // Verificar se é um mês (ex: "jan.", "fev.")
-        const monthKey = content.toLowerCase().replace('.', '').substring(0, 3);
-        if (monthMap.hasOwnProperty(monthKey)) {
-            axisLabels.push({ x, type: 'month', month: monthMap[monthKey], text: content });
-        }
-    });
-
-    // Ordenar por posição X
-    axisLabels.sort((a, b) => a.x - b.x);
-
-    // Associar anos aos meses (cada mês herda o último ano visto)
-    let currentYear = 2025; // default
-    axisLabels.forEach(label => {
-        if (label.type === 'year') {
-            currentYear = label.year;
-        } else if (label.type === 'month') {
-            label.year = currentYear;
-            // Se já passamos de dezembro e voltamos pra janeiro, incrementa o ano
-            const prevMonth = axisLabels.filter(l => l.type === 'month' && l.x < label.x).pop();
-            if (prevMonth && prevMonth.month > label.month) {
-                label.year = prevMonth.year + 1;
-                currentYear = label.year;
-            }
-        }
-    });
-
-    const monthLabels = axisLabels.filter(l => l.type === 'month' && l.year);
-    console.log('📅 Labels de mês com ano:', monthLabels.map(l => `${l.text}/${l.year} @${l.x.toFixed(0)}`));
-
-    // ✅ Calcular escala usando dois labels de mês consecutivos
-    let pixelsPerDay = null;
-    let refLabel = null;
-
-    for (let i = 0; i < monthLabels.length - 1; i++) {
-        const l1 = monthLabels[i];
-        const l2 = monthLabels[i + 1];
-
-        const date1 = new Date(l1.year, l1.month, 1);
-        const date2 = new Date(l2.year, l2.month, 1);
-        const daysBetween = (date2 - date1) / (1000 * 60 * 60 * 24);
-        const pixelsBetween = l2.x - l1.x;
-
-        if (daysBetween > 0 && pixelsBetween > 0) {
-            pixelsPerDay = pixelsBetween / daysBetween;
-            refLabel = l1;
-            console.log(`📐 Escala: ${pixelsBetween.toFixed(0)}px / ${daysBetween} dias = ${pixelsPerDay.toFixed(2)} px/dia`);
-            break;
-        }
-    }
-
-    if (!pixelsPerDay || !refLabel) {
-        console.warn('⚠️ Não foi possível calcular escala precisa');
-        return;
-    }
-
-    // ✅ Calcular posição de "hoje"
-    const refDate = new Date(refLabel.year, refLabel.month, 1);
-    const daysFromRef = (today - refDate) / (1000 * 60 * 60 * 24);
-    const xPosition = refLabel.x + (daysFromRef * pixelsPerDay);
-
-    console.log('📅 Referência:', refDate.toLocaleDateString(), '@ x =', refLabel.x.toFixed(0));
-    console.log('📅 Hoje:', today.toLocaleDateString());
-    console.log('📅 Dias desde ref:', daysFromRef.toFixed(0));
-    console.log(`📍 Posição calculada: x = ${xPosition.toFixed(0)}`);
-
-    // ✅ Calcular área Y do gráfico pelas barras
-    const allBars = svg.querySelectorAll('rect');
-    let minY = Infinity, maxY = 0;
-
-    allBars.forEach(bar => {
-        const fill = bar.getAttribute('fill');
-        const height = parseFloat(bar.getAttribute('height') || 0);
-        const y = parseFloat(bar.getAttribute('y') || 0);
-        // Barras de dados têm altura entre 15 e 50px geralmente
-        if (fill && fill !== 'none' && fill !== '#ffffff' && fill !== 'white' && height > 10 && height < 60) {
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y + height);
-        }
-    });
-
-    if (minY === Infinity) { minY = 50; maxY = 400; }
-
-    const chartY = minY;
-    const chartHeight = maxY - minY;
-
-    // ✅ CRIAR ELEMENTOS SVG COM VALIDAÇÃO
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.classList.add('today-line');
-    g.style.pointerEvents = 'none';
-
-    // Fundo semi-transparente
-    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bgRect.setAttribute('x', xPosition - 15);
-    bgRect.setAttribute('y', chartY);
-    bgRect.setAttribute('width', '30');
-    bgRect.setAttribute('height', chartHeight);
-    bgRect.setAttribute('fill', '#fee2e2');
-    bgRect.setAttribute('opacity', '0.3');
-
-    // Linha vertical
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', xPosition);
-    line.setAttribute('y1', chartY);
-    line.setAttribute('x2', xPosition);
-    line.setAttribute('y2', chartY + chartHeight);
-    line.setAttribute('stroke', '#dc2626');
-    line.setAttribute('stroke-width', '3');
-    line.setAttribute('opacity', '0.8');
-
-    // Label "Hoje" com fundo
-    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    labelBg.setAttribute('x', xPosition + 8);
-    labelBg.setAttribute('y', chartY + 5);
-    labelBg.setAttribute('width', '50');
-    labelBg.setAttribute('height', '24');
-    labelBg.setAttribute('fill', 'white');
-    labelBg.setAttribute('stroke', '#dc2626');
-    labelBg.setAttribute('stroke-width', '2');
-    labelBg.setAttribute('rx', '4');
-
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', xPosition + 33);
-    label.setAttribute('y', chartY + 22);
-    label.setAttribute('fill', '#dc2626');
-    label.setAttribute('font-size', '14');
-    label.setAttribute('font-weight', 'bold');
-    label.setAttribute('text-anchor', 'middle');
-    label.textContent = 'Hoje';
-
-    // Adicionar tudo ao grupo
-    g.appendChild(bgRect);
-    g.appendChild(line);
-    g.appendChild(labelBg);
-    g.appendChild(label);
-
-    // Adicionar ao SVG
-    svg.appendChild(g);
-
-    console.log('🎉 Linha "Hoje" adicionada com sucesso!');
-}
         // ===== ⭐ INÍCIO: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
     const kimaiFileInput = document.getElementById('kimai-file-input');
     const selectedFileInfo = document.getElementById('selected-file-info');
