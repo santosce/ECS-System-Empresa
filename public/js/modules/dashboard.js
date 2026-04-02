@@ -228,6 +228,11 @@ export function updateMonthlyAvailabilityChart() {
         monthlyAvailabilityChart = null;
     }
 
+    // Ajustar altura dinamicamente: 30px por barra, mínimo 200px
+    const BAR_HEIGHT = 30;
+    const dynamicHeight = Math.max(200, dataByProf.length * BAR_HEIGHT);
+    canvas.style.height = dynamicHeight + 'px';
+
     const ctx = canvas.getContext('2d');
     monthlyAvailabilityChart = new Chart(ctx, {
         type: 'bar',
@@ -237,7 +242,8 @@ export function updateMonthlyAvailabilityChart() {
                 label: 'Horas',
                 data: dataByProf.map(d => d.horas),
                 backgroundColor: '#4f46e5',
-                borderRadius: 4
+                borderRadius: 4,
+                barThickness: 18
             }]
         },
         options: {
@@ -258,6 +264,9 @@ export function updateMonthlyAvailabilityChart() {
                 x: {
                     beginAtZero: true,
                     ticks: { callback: (value) => value + 'h' }
+                },
+                y: {
+                    ticks: { font: { size: 12 } }
                 }
             }
         },
