@@ -53,14 +53,26 @@ export function drawTimelineChart() {
     dataTable.addColumn({ type: 'date', id: 'End' });
     dataTable.addColumn({ type: 'string', role: 'style' });
 
-    // Linha invisível para forçar "hoje" no range
+    // Calcular range global (todas as alocações, sem filtro) para fixar a escala
+    const todasAlocacoes = getAlocacoes();
+    let globalMin = new Date();
+    let globalMax = new Date();
+
+    todasAlocacoes.forEach(a => {
+        if (a.dataInicio && a.dataFim) {
+            const ini = new Date(a.dataInicio + 'T00:00:00');
+            const fim = new Date(a.dataFim + 'T00:00:00');
+            if (ini < globalMin) globalMin = ini;
+            if (fim > globalMax) globalMax = fim;
+        }
+    });
+
+    // Margem de 15 dias em cada extremo para respirar
+    globalMin.setDate(globalMin.getDate() - 15);
+    globalMax.setDate(globalMax.getDate() + 15);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const invisibleChar = '\u200B';
-    dataTable.addRow([invisibleChar, invisibleChar, '', today, todayEnd, 'opacity: 0; height: 0;']);
 
     alocacoes.forEach(aloc => {
         const prof = getProfissionais().find(p => p.id === aloc.profissionalId);
@@ -93,7 +105,11 @@ export function drawTimelineChart() {
         avoidOverlappingGridLines: false,
         tooltip: { isHtml: true },
         backgroundColor: '#ffffff',
-        height: Math.max(600, (alocacoes.length + 1) * 50)
+        height: Math.max(600, (alocacoes.length + 1) * 50),
+        hAxis: {
+            minValue: globalMin,
+            maxValue: globalMax
+        }
     };
 
     container.innerHTML = '';
@@ -173,11 +189,15 @@ function addTodayLineToTimeline(container, alocacoes) {
         if (/^\d{4}$/.test(content)) {
             lastYear = parseInt(content);
             axisLabels.push({ x, type: 'year', year: lastYear });
+            return;
         }
 
         const monthKey = content.toLowerCase().replace('.', '').substring(0, 3);
         if (Object.prototype.hasOwnProperty.call(monthMap, monthKey)) {
-            axisLabels.push({ x, type: 'month', month: monthMap[monthKey], text: content });
+            // Extrai o dia do label quando presente (ex: "jan. 4" → 4, "jan." → 1)
+            const dayMatch = content.match(/(\d+)\s*$/);
+            const day = dayMatch ? parseInt(dayMatch[1]) : 1;
+            axisLabels.push({ x, type: 'month', month: monthMap[monthKey], day, text: content });
         }
     });
 
@@ -205,8 +225,8 @@ function addTodayLineToTimeline(container, alocacoes) {
     for (let i = 0; i < monthLabels.length - 1; i++) {
         const l1 = monthLabels[i];
         const l2 = monthLabels[i + 1];
-        const date1 = new Date(l1.year, l1.month, 1);
-        const date2 = new Date(l2.year, l2.month, 1);
+        const date1 = new Date(l1.year, l1.month, l1.day || 1);
+        const date2 = new Date(l2.year, l2.month, l2.day || 1);
         const daysBetween   = (date2 - date1) / (1000 * 60 * 60 * 24);
         const pixelsBetween = l2.x - l1.x;
         if (daysBetween > 0 && pixelsBetween > 0) {
@@ -218,7 +238,7 @@ function addTodayLineToTimeline(container, alocacoes) {
 
     if (!pixelsPerDay || !refLabel) return;
 
-    const refDate     = new Date(refLabel.year, refLabel.month, 1);
+    const refDate     = new Date(refLabel.year, refLabel.month, refLabel.day || 1);
     const daysFromRef = (today - refDate) / (1000 * 60 * 60 * 24);
     const xPosition   = refLabel.x + (daysFromRef * pixelsPerDay);
 
@@ -254,20 +274,28 @@ function addTodayLineToTimeline(container, alocacoes) {
     line.setAttribute('stroke-width', '3');
     line.setAttribute('opacity', '0.8');
 
+    const todayLabel = (() => {
+        const d = new Date();
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        return `${dd}/${mm}/${yy}`;
+    })();
+
     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    labelBg.setAttribute('x', xPosition + 8); labelBg.setAttribute('y', minY + 5);
-    labelBg.setAttribute('width', '50');      labelBg.setAttribute('height', '24');
+    labelBg.setAttribute('x', xPosition + 6); labelBg.setAttribute('y', minY + 5);
+    labelBg.setAttribute('width', '62');       labelBg.setAttribute('height', '24');
     labelBg.setAttribute('fill', 'white');
     labelBg.setAttribute('stroke', '#dc2626'); labelBg.setAttribute('stroke-width', '2');
     labelBg.setAttribute('rx', '4');
 
     const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', xPosition + 33); label.setAttribute('y', minY + 22);
+    label.setAttribute('x', xPosition + 37); label.setAttribute('y', minY + 22);
     label.setAttribute('fill', '#dc2626');
-    label.setAttribute('font-size', '14');
+    label.setAttribute('font-size', '12');
     label.setAttribute('font-weight', 'bold');
     label.setAttribute('text-anchor', 'middle');
-    label.textContent = 'Hoje';
+    label.textContent = todayLabel;
 
     g.appendChild(bgRect);
     g.appendChild(line);

@@ -196,30 +196,28 @@ export function updateMonthlyAvailabilityChart() {
 
     const dataByProf = profsFiltrados.map(prof => {
         const alocacoesProf = getAlocacoes().filter(a => a.profissionalId === prof.id);
-        
+
         let totalHoras = 0;
-        alocacoesProf.forEach(alocacao => {
-            const alocStart = new Date(alocacao.dataInicio);
-            const alocEnd = new Date(alocacao.dataFim);
-            
-            const start = alocStart < firstDay ? firstDay : alocStart;
-            const end = alocEnd > lastDay ? lastDay : alocEnd;
-            
-            if (start <= end && start <= lastDay && end >= firstDay) {
-                let current = new Date(start);
-                while (current <= end) {
-                    const dayOfWeek = current.getDay();
-                    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                        totalHoras += 8;
+        let current = new Date(firstDay);
+        while (current <= lastDay) {
+            const dayOfWeek = current.getDay();
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                let porcentagemDia = 0;
+                alocacoesProf.forEach(aloc => {
+                    const inicio = new Date(aloc.dataInicio + 'T00:00:00');
+                    const fim = new Date(aloc.dataFim + 'T00:00:00');
+                    if (current >= inicio && current <= fim) {
+                        porcentagemDia += parseInt(aloc.percentual || 0);
                     }
-                    current.setDate(current.getDate() + 1);
-                }
+                });
+                totalHoras += Math.min((porcentagemDia / 100) * 8, 8);
             }
-        });
+            current.setDate(current.getDate() + 1);
+        }
 
         return {
             nome: prof.nome,
-            horas: totalHoras
+            horas: Math.round(totalHoras * 10) / 10
         };
     }).filter(item => item.horas > 0);
 

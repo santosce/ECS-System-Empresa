@@ -653,13 +653,13 @@ function clearFirestoreListeners() {
         const filterStatusFim = document.getElementById('prazos-filter-status-fim')?.value || '';
         const filterStatusProjeto = document.getElementById('prazos-filter-status-projeto')?.value || '';
 
-        let filtered = getProjetos();
-        
+        let filtered = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
         // Filtro por nome do projeto
         if (filterProjeto) {
             filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
         }
-        
+
         // Filtro por status do projeto
         if (filterStatusProjeto) {
             filtered = filtered.filter(p => p.status === filterStatusProjeto);
