@@ -1,108 +1,118 @@
-// ===== ECS SYSTEM - VERSÃO 3.2.8 =====
+// ===== IMPORTAÇÕES DE MÓDULOS =====
+import { 
+    initializeFirebase,
+    getDb,
+    getProvider,
+    getAppId,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged,
+    collection,
+    onSnapshot,
+    getDoc,
+    getDocs
+} from './js/config/firebase-config.js';
+import appState, {
+    getProfissionais,
+    setProfissionais,
+    getProjetos,
+    setProjetos,
+    getAlocacoes,
+    setAlocacoes,
+    setUsers,
+    getProfissionalById,
+    getProjetoById,
+    getAlocacaoById
+} from './js/state/app-state.js';
+import {
+    APP_VERSION,
+    APP_NAME,
+    debounce,
+    formatDate,
+    getStatusColor,
+    getCollectionPath,
+    showNotification
+} from './js/core/utils.js';
+import {
+    getCurrentUserId,
+    getCurrentUserRole,
+    isAdmin,
+    loginWithGoogle,
+    logout,
+    getUserRole,
+    updateUIBasedOnRole,
+    setupAuthListener
+} from './js/core/auth.js';
+import {
+    initializeNavigation,
+    switchView,
+    setupNavigationListeners,
+    setOpenedFromTimeline
+} from './js/core/navigation.js';
+import {
+    updateDashboard,
+    updateProfileChart,
+    updateMonthlyAvailabilityChart,
+    populateDashboardFilters
+} from './js/modules/dashboard.js';
+import {
+    renderProfissionais,
+    openProfissionalModal,
+    closeProfissionalModal,
+    saveProfissional,
+    deleteProfissional,
+    populateProfissionaisFilters,
+    initializeProfessionalsModule
+} from './js/modules/professionals.js';
+import {
+    renderProjetos,
+    openProjetoModal,
+    closeProjetoModal,
+    saveProjeto,
+    deleteProjeto,
+    initializeProjectsModule
+} from './js/modules/projects.js';
+import {
+    renderAlocacoes,
+    openAlocacaoModal,
+    closeAlocacaoModal,
+    deleteAlocacao,
+    populateAlocacoesFilters,
+    initializeAllocationsModule
+} from './js/modules/allocations.js';
+import {
+    renderUsersTable,
+    openUserModal,
+    closeUserModal,
+    saveUser,
+    deleteUser,
+    initializeUsersModule
+} from './js/modules/users.js';
+import {
+    drawTimelineChart,
+    populateTimelineFilters,
+    initializeTimelineModule
+} from './js/modules/timeline.js';
+import { initializeKimaiModule } from './js/modules/kimai.js';
+
+
+
+// ===== ECS SYSTEM - VERSÃO 4.0.0 MODULAR =====
 // Sistema de Gestão de Capacity
-// Última atualização: 28/01/26
-// Correção Importacao Kimai
+// Refatoração modular iniciada em: [24/03/26]
 
-// Importações do Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// ===== VARIÁVEIS GLOBAIS =====
-const APP_VERSION = '3.2.8';
-const APP_NAME = 'ECS System';
-let app;
-let db;
-let auth;
-let provider;
-let appId;
-
-const appState = {
-    profissionais: [],
-    projetos: [],
-    alocacoes: [],
-    users: []
-};
-
-let openedFromTimeline = false;
-
-// ===== FUNÇÃO PARA DEBOUNCE =====
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), delay);
-    };
-}
-
-// ===== FUNÇÃO GLOBAL PARA NOTIFICAÇÕES =====
-window.showNotification = function(message, type = 'info') {
-    if (typeof Toastify === 'undefined') {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        return;
-    }
-
-    const config = {
-        success: {
-            background: 'linear-gradient(to right, #00b09b, #96c93d)',
-            icon: '✓',
-            duration: 3000
-        },
-        error: {
-            background: 'linear-gradient(to right, #ff5f6d, #ffc371)',
-            icon: '✕',
-            duration: 4000
-        },
-        warning: {
-            background: 'linear-gradient(to right, #f7971e, #ffd200)',
-            icon: '⚠',
-            duration: 3500
-        },
-        info: {
-            background: 'linear-gradient(to right, #667eea, #764ba2)',
-            icon: 'ℹ',
-            duration: 3000
-        }
-    };
-
-    const settings = config[type] || config.info;
-
-    Toastify({
-        text: `${settings.icon} ${message}`,
-        duration: settings.duration,
-        close: true,
-        gravity: "top",
-        position: "right",
-        stopOnFocus: true,
-        style: {
-            background: settings.background,
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '500',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-        }
-    }).showToast();
-};
-
-const showNotification = window.showNotification;
 
 // ===== INICIALIZAR FIREBASE =====
-async function initializeFirebase() {
+async function initializeFirebaseApp() {
     try {
         console.log(`%c${APP_NAME} v${APP_VERSION}`, 'color: #4f46e5; font-size: 16px; font-weight: bold;');
         console.log('%cSistema inicializando...', 'color: #6b7280;');
         
-        const response = await fetch('/__/firebase/init.json');
-        if (!response.ok) throw new Error('Falha ao carregar configuração do Firebase');
+        // Inicializar Firebase usando o módulo
+        await initializeFirebase();
         
-        const firebaseConfig = await response.json();
-        appId = firebaseConfig.projectId;
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        provider = new GoogleAuthProvider();
-
-        console.log('%c✓ Firebase inicializado com sucesso', 'color: #10b981;');
+        // Inicializar lógica da aplicação
         initializeAppLogic();
     } catch (error) {
         console.error("Falha ao inicializar o Firebase:", error);
@@ -112,11 +122,26 @@ async function initializeFirebase() {
 
 // ===== LÓGICA PRINCIPAL DA APLICAÇÃO =====
 function initializeAppLogic() {
-    let currentUserId = null;
-    let currentUserRole = null;
-    let profileChart = null;
-    let monthlyAvailabilityChart = null;
     let isGoogleChartsLoaded = false;
+    // Inicializar navegação
+    initializeNavigation();
+    // Inicializar módulo de profissionais
+    initializeProfessionalsModule();
+   // Inicializar módulo de projetos
+    initializeProjectsModule();
+    // Inicializar módulo de alocações
+    initializeAllocationsModule();
+    // Inicializar módulo de usuários
+    initializeUsersModule();
+    // Inicializar módulo de timeline
+    initializeTimelineModule();
+    // Inicializar módulo de kimai
+    initializeKimaiModule();
+
+    // Carregar Google Charts
+    if (typeof google !== 'undefined' && google.charts) {
+        // ...
+    }
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -134,31 +159,12 @@ function initializeAppLogic() {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
 
-    // ✅ CORREÇÃO: Login com Popup (estava faltando!)
-    loginBtn?.addEventListener('click', async () => {
-        console.log('🔵 Botão de login clicado');
-        try {
-            console.log('🔄 Abrindo popup de login...');
-            await signInWithPopup(auth, provider);
-            console.log('✅ Login concluído com sucesso');
-        } catch (error) {
-            console.error("❌ Erro no login:", error);
-            if (error.code !== 'auth/popup-closed-by-user') {
-                showNotification('Erro ao fazer login: ' + error.message, 'error');
-            }
-        }
-    });
+    //  Login 
+    loginBtn.addEventListener('click', loginWithGoogle);
 
     // Logout
-    logoutBtn?.addEventListener('click', async () => {
-        try {
-            await signOut(auth);
-            showNotification('Logout realizado com sucesso', 'info');
-        } catch (error) {
-            console.error("Erro no logout:", error);
-            showNotification('Erro ao fazer logout', 'error');
-        }
-    });
+    logoutBtn.addEventListener('click', logout);
+
 	// ===== NOVO: Listener global para expandir/recolher listas de importação =====
     document.body.addEventListener('click', function(e) {
         // Verifica se o clique foi em um link "expand-toggle"
@@ -181,81 +187,62 @@ function initializeAppLogic() {
             }
         }
     });
-    // Listener de mudança de autenticação
-    onAuthStateChanged(auth, async (user) => {
-        console.log('🔄 Estado de autenticação mudou:', user ? 'Logado' : 'Não logado');
-        
-        if (user) {
-            console.log('✅ Usuário autenticado:', user.email);
-            currentUserId = user.uid;
-            
-            // Obter role do usuário
-            currentUserRole = await getUserRole(user);
-            console.log('👤 Role do usuário:', currentUserRole);
-            
-            // Atualizar UI do usuário
-            document.getElementById('user-name').textContent = user.displayName || user.email;
-            document.getElementById('user-photo').src = user.photoURL || 'https://via.placeholder.com/40';
-            document.getElementById('user-role').textContent = currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1);
-            
-            // Mostrar app, esconder login
-            loginView.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-            
-            updateUIBasedOnRole(currentUserRole);
-            
-            // Configurar listeners do Firestore
-            setupFirestoreListeners();
-            
-            showNotification('Bem-vindo, ' + user.displayName + '!', 'success');
-        } else {
-            console.log('❌ Usuário não autenticado');
-            currentUserId = null;
-            currentUserRole = null;
-            
-            // Mostrar login, esconder app
-            loginView.classList.remove('hidden');
-            appContainer.classList.add('hidden');
-        }
-    });
+    // Configurar listener de autenticação
+setupAuthListener(
+    async (user, role) => {
+        loginView.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        setupFirestoreListeners();
+    },
+    () => {
+        clearFirestoreListeners();  // ← ADICIONAR ESTA LINHA
+        loginView.classList.remove('hidden');
+        appContainer.classList.add('hidden');
+    }
+);
+    
 
     // Função para configurar listeners do Firestore
-    function setupFirestoreListeners() {
+    // Variável global para armazenar os unsubscribe dos listeners
+let firestoreUnsubscribers = [];
+
+function setupFirestoreListeners() {
     console.log('🔄 Configurando listeners do Firestore...');
     
+    // Limpar listeners anteriores se existirem
+    clearFirestoreListeners();
+    
     // Listener para Profissionais
-    onSnapshot(collection(db, getCollectionPath('profissionais')), (snapshot) => {
-        appState.profissionais = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Profissionais atualizados:', appState.profissionais.length);
+    const unsubProf = onSnapshot(collection(getDb(), getCollectionPath('profissionais')), (snapshot) => {
+        setProfissionais(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderProfissionais === 'function') renderProfissionais();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
         if (typeof populateAvailabilityChartFilters === 'function') populateAvailabilityChartFilters();
         if (typeof populateProfileFilters === 'function') populateProfileFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
         if (typeof populateProfissionaisFilters === 'function') populateProfissionaisFilters();
     });
+    firestoreUnsubscribers.push(unsubProf);
 
     // Listener para Projetos
-    onSnapshot(collection(db, getCollectionPath('projetos')), (snapshot) => {
-        appState.projetos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Projetos atualizados:', appState.projetos.length);
+    const unsubProj = onSnapshot(collection(getDb(), getCollectionPath('projetos')), (snapshot) => {
+        setProjetos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderProjetos === 'function') renderProjetos();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
     });
+    firestoreUnsubscribers.push(unsubProj);
 
     // Listener para Alocações
-    onSnapshot(collection(db, getCollectionPath('alocacoes')), (snapshot) => {
-        appState.alocacoes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📊 Alocações atualizadas:', appState.alocacoes.length);
+    const unsubAloc = onSnapshot(collection(getDb(), getCollectionPath('alocacoes')), (snapshot) => {
+        setAlocacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderAlocacoes === 'function') renderAlocacoes();
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
-        if (typeof populateTimelineFilters === 'function') populateTimelineFilters();
+        populateTimelineFilters();
         
-        // ✅ REDESENHAR GRÁFICO MENSAL APÓS CARREGAR ALOCAÇÕES
         setTimeout(() => {
             if (typeof updateMonthlyAvailabilityChart === 'function') {
                 console.log('🔄 Redesenhando gráfico mensal após carregar dados...');
@@ -263,161 +250,29 @@ function initializeAppLogic() {
             }
         }, 800);
     });
+    firestoreUnsubscribers.push(unsubAloc);
 
     // Listener para Usuários (apenas admin)
-    if (currentUserRole === 'admin') {
-        onSnapshot(collection(db, getCollectionPath('users')), (snapshot) => {
-            appState.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            console.log('📊 Usuários atualizados:', appState.users.length);
+    if (getCurrentUserRole() === 'admin') {
+        const unsubUsers = onSnapshot(collection(getDb(), getCollectionPath('users')), (snapshot) => {
+            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             if (typeof renderUsersTable === 'function') renderUsersTable();
         });
+        firestoreUnsubscribers.push(unsubUsers);
     }
     
     console.log('✅ Listeners do Firestore configurados');
 }
 
-    // Verificar role do usuário
-    async function getUserRole(user) {
-        try {
-            const userDocRef = doc(db, getCollectionPath('users'), user.uid);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (userDoc.exists()) {
-                return userDoc.data().role || 'viewer';
-            } else {
-                const newUserData = {
-                    email: user.email,
-                    name: user.displayName,
-                    role: 'viewer',
-                    active: true,
-                    createdAt: new Date().toISOString()
-                };
-                await setDoc(userDocRef, newUserData);
-                return 'viewer';
-            }
-        } catch (error) {
-            console.error('Erro ao verificar role:', error);
-            return 'viewer';
-        }
-    }
-
-    // Atualizar UI baseado no role
-    function updateUIBasedOnRole(role) {
-        if (!role) return;
-        
-        const isViewer = role === 'viewer';
-        const isAdmin = role === 'admin';
-        
-        document.querySelectorAll('.edit-btn, .delete-btn, .add-btn').forEach(btn => {
-            btn.style.display = isViewer ? 'none' : '';
-        });
-        
-        const mainActions = document.getElementById('main-actions');
-        if (mainActions) {
-            mainActions.style.display = isViewer ? 'none' : 'block';
-        }
-        
-        const manageUsersLink = document.getElementById('manage-users-link');
-        if (manageUsersLink) {
-            manageUsersLink.classList.toggle('hidden', !isAdmin);
-        }
-        
-        const userRoleElement = document.getElementById('user-role');
-        if (userRoleElement) {
-            userRoleElement.textContent = role.charAt(0).toUpperCase() + role.slice(1);
-        }
-    }
-
-    // Função para formatar data
-    function formatDate(dateString) {
-        if (!dateString || dateString.length < 10) return 'N/A';
-        const [year, month, day] = dateString.split('-');
-        return `${day}/${month}/${year}`;
-    }
-
-    // Obter caminho da coleção
-    function getCollectionPath(collectionName) {
-        if (!appId) throw new Error('Firebase não inicializado');
-        return `artifacts/${appId}/public/data/${collectionName}`;
-    }
-
-    function getStatusColor(status) {
-        const colors = {
-            'Não Iniciado': 'bg-gray-100 text-gray-800',
-            'Em Andamento': 'bg-blue-100 text-blue-800',
-            'Concluído': 'bg-green-100 text-green-800',
-            'Atrasado': 'bg-red-100 text-red-800',
-            'Em Pausa': 'bg-yellow-100 text-yellow-800'
-        };
-        return colors[status] || 'bg-gray-100 text-gray-800';
-    }
-
+function clearFirestoreListeners() {
+    console.log('🧹 Limpando listeners do Firestore...');
+    firestoreUnsubscribers.forEach(unsub => unsub());
+    firestoreUnsubscribers = [];
+}
 // ===== FIM DA PARTE 1 =====
 // ===== PARTE 2 - NAVEGAÇÃO, MODAIS E RENDERIZAÇÃO =====
 
-    // ===== NAVEGAÇÃO E VIEWS =====
-    const views = document.querySelectorAll('.view');
-    const navLinks = document.querySelectorAll('.nav-link');
-    const viewTitle = document.getElementById('view-title');
-    const mainActionsContainer = document.getElementById('main-actions');
-    
-    const addIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
-    
-    const createButton = (id, text, icon) => `<button id="${id}" class="add-btn px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center">${icon}${text}</button>`;
-
-    const viewConfig = {
-        dashboard: { title: 'Dashboard', actions: '' },
-        'buscar-disponibilidade': { title: 'Buscar Disponibilidade', actions: '' },
-        profissionais: { title: 'Profissionais', actions: createButton('add-profissional-btn', 'Adicionar Profissional', addIcon) },
-        projetos: { title: 'Projetos', actions: createButton('add-projeto-btn', 'Adicionar Projeto', addIcon) },
-        alocacoes: { title: 'Alocações', actions: createButton('add-alocacao-btn', 'Adicionar Alocação', addIcon) },
-        timeline: { title: 'Timeline de Capacity', actions: '' },
-        'gerenciar-usuarios': { title: 'Gerenciar Usuários', actions: '' },
-    };
-
-    function switchView(viewId) {
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById(viewId)?.classList.add('active');
-
-        navLinks.forEach(link => link.classList.remove('bg-gray-900'));
-        document.querySelector(`.nav-link[data-view="${viewId}"]`)?.classList.add('bg-gray-900');
-        
-        viewTitle.textContent = viewConfig[viewId]?.title || 'Página não encontrada';
-        mainActionsContainer.innerHTML = viewConfig[viewId]?.actions || '';
-        
-        document.getElementById('add-profissional-btn')?.addEventListener('click', () => openProfissionalModal());
-        document.getElementById('add-projeto-btn')?.addEventListener('click', () => openProjetoModal());
-        document.getElementById('add-alocacao-btn')?.addEventListener('click', () => openAlocacaoModal());
-
-        if (viewId === 'timeline' && isGoogleChartsLoaded) {
-             setTimeout(() => {
-                drawTimelineChart();
-             }, 100);
-        }
-
-        // ✅ NOVO: Redesenhar gráficos ao voltar para Dashboard
-        if (viewId === 'dashboard') {
-            setTimeout(() => {
-                if (profileChart) {
-                    profileChart.resize();
-                    profileChart.update('none');
-                }
-                if (monthlyAvailabilityChart) {
-                    monthlyAvailabilityChart.resize();
-                    monthlyAvailabilityChart.update('none');
-                }
-            }, 200);
-        }
-        
-        updateUIBasedOnRole(currentUserRole);
-    }
-
-    navLinks.forEach(link => link.addEventListener('click', (e) => {
-        e.preventDefault();
-        switchView(e.currentTarget.dataset.view);
-    }));
-
-    // ===== SISTEMA DE ABAS DO DASHBOARD =====
+     // ===== SISTEMA DE ABAS DO DASHBOARD =====
     const dashboardTabs = document.querySelectorAll('.dashboard-tab');
     const dashboardTabContents = document.querySelectorAll('.dashboard-tab-content');
 
@@ -490,750 +345,6 @@ function initializeAppLogic() {
     });
 });
 
-    // ===== FERIADOS NACIONAIS DO BRASIL =====
-    function getFeriadosNacionais(ano) {
-        const feriadosFixos = [
-            `${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`, 
-            `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-11-20`, `${ano}-12-25`
-        ];
-        
-        const a = ano % 19;
-        const b = Math.floor(ano / 100);
-        const c = ano % 100;
-        const d = Math.floor(b / 4);
-        const e = b % 4;
-        const f = Math.floor((b + 8) / 25);
-        const g = Math.floor((b - f + 1) / 3);
-        const h = (19 * a + b - d - g + 15) % 30;
-        const i = Math.floor(c / 4);
-        const k = c % 4;
-        const l = (32 + 2 * e + 2 * i - h - k) % 7;
-        const m = Math.floor((a + 11 * h + 22 * l) / 451);
-        const mes = Math.floor((h + l - 7 * m + 114) / 31);
-        const dia = ((h + l - 7 * m + 114) % 31) + 1;
-        
-        const pascoa = new Date(ano, mes - 1, dia);
-        const sextaSanta = new Date(pascoa);
-        sextaSanta.setDate(pascoa.getDate() - 2);
-        const carnaval = new Date(pascoa);
-        carnaval.setDate(pascoa.getDate() - 47);
-        const corpus = new Date(pascoa);
-        corpus.setDate(pascoa.getDate() + 60);
-        
-        const feriadosMoveis = [
-            sextaSanta.toISOString().split('T')[0],
-            carnaval.toISOString().split('T')[0],
-            corpus.toISOString().split('T')[0]
-        ];
-        
-        return [...feriadosFixos, ...feriadosMoveis];
-    }
-
-    function calcularDiasUteis(dataInicio, dataFim) {
-        const inicio = new Date(dataInicio + 'T00:00:00');
-        const fim = new Date(dataFim + 'T00:00:00');
-        
-        const anos = new Set();
-        for (let d = new Date(inicio); d <= fim; d.setDate(d.getDate() + 1)) {
-            anos.add(d.getFullYear());
-        }
-        
-        const todosFeriados = new Set();
-        anos.forEach(ano => {
-            getFeriadosNacionais(ano).forEach(feriado => todosFeriados.add(feriado));
-        });
-        
-        let diasUteis = 0;
-        for (let d = new Date(inicio); d <= fim; d.setDate(d.getDate() + 1)) {
-            const diaSemana = d.getDay();
-            const dataStr = d.toISOString().split('T')[0];
-            
-            if (diaSemana !== 0 && diaSemana !== 6 && !todosFeriados.has(dataStr)) {
-                diasUteis++;
-            }
-        }
-        
-        return diasUteis;
-    }
-
-    // ===== MODAIS =====
-    const modals = {
-        profissional: document.getElementById('profissional-modal'),
-        projeto: document.getElementById('projeto-modal'),
-        alocacao: document.getElementById('alocacao-modal'),
-    };
-    
-    const forms = {
-        profissional: document.getElementById('profissional-form'),
-        projeto: document.getElementById('projeto-form'),
-        alocacao: document.getElementById('alocacao-form'),
-    };
-
-    function populateAlocacaoDropdowns() {
-        const profSelect = document.getElementById('alocacao-profissional');
-        const projSelect = document.getElementById('alocacao-projeto');
-        if (!profSelect || !projSelect) return;
-        
-        profSelect.innerHTML = '<option value="">Selecione um profissional</option>';
-        projSelect.innerHTML = '<option value="">Selecione um projeto</option>';
-        
-        const activeProfessionals = appState.profissionais.filter(p => p.ativo !== 'Não');
-        activeProfessionals.forEach(p => profSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
-        appState.projetos.forEach(p => projSelect.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
-    }
-
-    // Cálculo de Horas Estimadas
-    function calcularHorasEstimadas() {
-        const dataInicio = document.getElementById('alocacao-inicio')?.value;
-        const dataFim = document.getElementById('alocacao-fim')?.value;
-        const percentual = parseInt(document.getElementById('alocacao-percentual')?.value) || 0;
-        const horasEstimadasInput = document.getElementById('horas-estimadas-profissional');
-        
-        if (dataInicio && dataFim && percentual > 0 && horasEstimadasInput) {
-            const diasUteis = calcularDiasUteis(dataInicio, dataFim);
-            const horasEstimadas = Math.round(diasUteis * (percentual / 100) * 8);
-            horasEstimadasInput.value = horasEstimadas;
-        } else if (horasEstimadasInput) {
-            horasEstimadasInput.value = '';
-        }
-    }
-
-    document.getElementById('alocacao-inicio')?.addEventListener('change', calcularHorasEstimadas);
-    document.getElementById('alocacao-fim')?.addEventListener('change', calcularHorasEstimadas);
-    document.getElementById('alocacao-percentual')?.addEventListener('input', calcularHorasEstimadas);
-
-    // Função para verificar disponibilidade
-    function checkProfissionalDisponibilidade(profissionalId, dataInicio, dataFim, percentualNovo, alocacaoIdAtual = null) {
-        if (!profissionalId || !dataInicio || !dataFim) {
-            return { disponivel: true, conflitos: [] };
-        }
-
-        const inicio = new Date(dataInicio + 'T00:00:00');
-        const fim = new Date(dataFim + 'T00:00:00');
-
-        const alocacoesConflitantes = appState.alocacoes.filter(a => {
-            if (alocacaoIdAtual && a.id === alocacaoIdAtual) return false;
-            if (a.profissionalId !== profissionalId) return false;
-
-            const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-            const alocFim = new Date(a.dataFim + 'T00:00:00');
-
-            return alocInicio <= fim && alocFim >= inicio;
-        });
-
-        if (alocacoesConflitantes.length === 0) {
-            return { disponivel: true, conflitos: [], percentualTotal: percentualNovo };
-        }
-
-        const conflitos = alocacoesConflitantes.map(a => {
-            const projeto = appState.projetos.find(p => p.id === a.projetoId);
-            return {
-                projeto: projeto?.nome || 'N/A',
-                percentual: a.percentual,
-                dataInicio: a.dataInicio,
-                dataFim: a.dataFim
-            };
-        });
-
-        const percentualJaAlocado = alocacoesConflitantes.reduce((sum, a) => sum + (parseInt(a.percentual) || 0), 0);
-        const percentualTotal = percentualJaAlocado + (parseInt(percentualNovo) || 0);
-
-        return {
-            disponivel: percentualTotal <= 100,
-            conflitos: conflitos,
-            percentualJaAlocado: percentualJaAlocado,
-            percentualTotal: percentualTotal
-        };
-    }
-
-    // Função para mostrar modal de conflito
-    function showConflictModal(profissionalNome, resultado, onConfirm, onCancel) {
-        const conflitosHTML = resultado.conflitos.map(c => `
-            <li class="py-2">
-                <strong>${c.projeto}</strong>: ${c.percentual}% 
-                (${formatDate(c.dataInicio)} - ${formatDate(c.dataFim)})
-            </li>
-        `).join('');
-
-        const modalHTML = `
-            <div id="conflict-modal" class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
-                <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
-                    <div class="p-6">
-                        <h2 class="text-2xl font-bold text-red-600 mb-4">⚠️ Atenção: Conflito de Alocação Detectado</h2>
-                        
-                        <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-                            <p class="text-gray-700 mb-2">
-                                <strong>Profissional:</strong> ${profissionalNome}
-                            </p>
-                            <p class="text-gray-700 mb-4">
-                                Este profissional ficará sobre-alocado se continuar!
-                            </p>
-                            
-                            <div class="mb-3">
-                                <p class="font-semibold text-gray-800">Alocações Existentes no Período:</p>
-                                <ul class="mt-2 space-y-1">${conflitosHTML}</ul>
-                            </div>
-                            
-                            <div class="flex justify-between items-center pt-3 border-t border-red-200">
-                                <span class="text-gray-700">Percentual já alocado:</span>
-                                <span class="font-bold text-red-600">${resultado.percentualJaAlocado}%</span>
-                            </div>
-                            <div class="flex justify-between items-center pt-2">
-                                <span class="text-gray-700">Percentual total (com nova alocação):</span>
-                                <span class="font-bold text-red-600">${resultado.percentualTotal}%</span>
-                            </div>
-                        </div>
-
-                        <p class="text-sm text-gray-600 mb-4">
-                            ⚠️ Tem certeza que deseja continuar com esta alocação?
-                        </p>
-
-                        <div class="flex justify-end space-x-3">
-                            <button id="conflict-cancel-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 font-medium">
-                                Cancelar
-                            </button>
-                            <button id="conflict-confirm-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium">
-                                Salvar Mesmo Assim
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-        document.getElementById('conflict-cancel-btn').addEventListener('click', () => {
-            document.getElementById('conflict-modal').remove();
-            onCancel();
-        });
-
-        document.getElementById('conflict-confirm-btn').addEventListener('click', () => {
-            document.getElementById('conflict-modal').remove();
-            onConfirm();
-        });
-
-        document.getElementById('conflict-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'conflict-modal') {
-                document.getElementById('conflict-modal').remove();
-                onCancel();
-            }
-        });
-    }
-
-    function openModal(modalName, data = null) {
-        const form = forms[modalName];
-        if (form) form.reset();
-
-        const modal = modals[modalName];
-        if (!modal) return;
-
-        const modalTitle = modal.querySelector('h2');
-        const idInput = modal.querySelector('input[type="hidden"]');
-        if (idInput) idInput.value = '';
-
-        document.querySelectorAll('.error-msg').forEach(msg => msg.classList.add('hidden'));
-        
-        const todayLine = document.querySelector('.today-line');
-        if (todayLine) {
-            todayLine.style.display = 'none';
-        }
-
-        if (data) {
-            modalTitle.textContent = `Editar ${modalName.charAt(0).toUpperCase() + modalName.slice(1)}`;
-            if (idInput) idInput.value = data.id || '';
-            
-            if (modalName === 'profissional') {
-                document.getElementById('nome').value = data.nome || '';
-                document.getElementById('perfil').value = data.perfil || '';
-                document.getElementById('time').value = data.time || '';
-                document.getElementById('empresa').value = data.empresa || '';
-                document.getElementById('lider').value = data.lider || '';
-                document.getElementById('faturado').value = data.faturado || 'Sim';
-                document.getElementById('senioridade').value = data.senioridade || '';
-                document.getElementById('ativo').value = data.ativo || 'Sim';
-            } else if (modalName === 'projeto') {
-                document.getElementById('nome-projeto').value = data.nome || '';
-                document.getElementById('cliente').value = data.cliente || '';
-                document.getElementById('tipo-projeto').value = data.tipo || 'Direto';
-                document.getElementById('horas-estimadas-projeto').value = data.horasEstimadasProjeto || '';
-                document.getElementById('inicio-previsto').value = data.inicioPrevisto || '';
-                document.getElementById('fim-previsto').value = data.fimPrevisto || '';
-                document.getElementById('inicio-real').value = data.inicioReal || '';
-                document.getElementById('fim-real').value = data.fimReal || '';
-                document.getElementById('status-projeto').value = data.status || '';
-            } else if (modalName === 'alocacao') {
-                populateAlocacaoDropdowns();
-                setTimeout(() => {
-                    document.getElementById('alocacao-profissional').value = data.profissionalId || '';
-                    document.getElementById('alocacao-projeto').value = data.projetoId || '';
-                    document.getElementById('alocacao-faturado').value = data.faturado || 'Sim';
-                    document.getElementById('alocacao-percentual').value = data.percentual || '';
-                    document.getElementById('horas-estimadas-profissional').value = data.horasEstimadas || '';
-                    document.getElementById('horas-realizadas-profissional').value = data.horasRealizadas || '';
-                    document.getElementById('alocacao-inicio').value = data.dataInicio || '';
-                    document.getElementById('alocacao-fim').value = data.dataFim || '';
-                }, 100);
-            }
-        } else {
-            modalTitle.textContent = `Adicionar ${modalName.charAt(0).toUpperCase() + modalName.slice(1)}`;
-            if (modalName === 'alocacao') populateAlocacaoDropdowns();
-        }
-        
-        modal.classList.remove('hidden');
-    }
-
-    const openProfissionalModal = (data) => openModal('profissional', data);
-    const openProjetoModal = (data) => openModal('projeto', data);
-    const openAlocacaoModal = (data) => {
-        openedFromTimeline = false;
-        openModal('alocacao', data);
-    };
-
-    function closeModal() {
-        Object.values(modals).forEach(modal => modal?.classList.add('hidden'));
-        
-        const todayLine = document.querySelector('.today-line');
-        if (todayLine) {
-            todayLine.style.display = 'block';
-        }
-        
-        if (openedFromTimeline) {
-            openedFromTimeline = false;
-            switchView('timeline');
-        }
-    }
-
-    document.querySelectorAll('.cancel-btn').forEach(btn => btn.addEventListener('click', closeModal));
-    Object.values(modals).forEach(modal => modal?.addEventListener('click', e => {
-        if (e.target === modal) closeModal();
-    }));
-
-    // ===== HANDLERS DOS FORMULÁRIOS =====
-    
-    // Form: Profissional
-    forms.profissional?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('profissional-id').value;
-        const data = {
-            nome: document.getElementById('nome').value,
-            perfil: document.getElementById('perfil').value,
-            time: document.getElementById('time').value,
-            empresa: document.getElementById('empresa').value,
-            lider: document.getElementById('lider').value,
-            faturado: document.getElementById('faturado').value,
-            senioridade: document.getElementById('senioridade').value,
-            ativo: document.getElementById('ativo').value
-        };
-
-        try {
-            if (id) {
-                await setDoc(doc(db, getCollectionPath('profissionais'), id), data);
-                showNotification('Profissional atualizado com sucesso!', 'success');
-            } else {
-                await addDoc(collection(db, getCollectionPath('profissionais')), data);
-                showNotification('Profissional adicionado com sucesso!', 'success');
-            }
-            closeModal();
-        } catch (error) {
-            console.error('Erro ao salvar profissional:', error);
-            showNotification('Erro ao salvar profissional', 'error');
-        }
-    });
-
-    // Form: Projeto
-    forms.projeto?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('projeto-id').value;
-        const data = {
-            nome: document.getElementById('nome-projeto').value,
-            cliente: document.getElementById('cliente').value,
-            tipo: document.getElementById('tipo-projeto').value,
-            horasEstimadasProjeto: parseInt(document.getElementById('horas-estimadas-projeto').value) || 0,
-            inicioPrevisto: document.getElementById('inicio-previsto').value,
-            fimPrevisto: document.getElementById('fim-previsto').value,
-            inicioReal: document.getElementById('inicio-real').value || null,
-            fimReal: document.getElementById('fim-real').value || null,
-            status: document.getElementById('status-projeto').value
-        };
-
-        try {
-            if (id) {
-                await setDoc(doc(db, getCollectionPath('projetos'), id), data);
-                showNotification('Projeto atualizado com sucesso!', 'success');
-            } else {
-                await addDoc(collection(db, getCollectionPath('projetos')), data);
-                showNotification('Projeto adicionado com sucesso!', 'success');
-            }
-            closeModal();
-        } catch (error) {
-            console.error('Erro ao salvar projeto:', error);
-            showNotification('Erro ao salvar projeto', 'error');
-        }
-    });
-
-    // Form: Alocação
-    // Form: Alocação (VERSÃO CORRIGIDA)
-forms.alocacao?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('alocacao-id').value;
-    const profissionalId = document.getElementById('alocacao-profissional').value;
-    const projetoId = document.getElementById('alocacao-projeto').value;
-    const dataInicio = document.getElementById('alocacao-inicio').value;
-    const dataFim = document.getElementById('alocacao-fim').value;
-    const percentual = parseInt(document.getElementById('alocacao-percentual').value);
-
-    const data = {
-        profissionalId,
-        projetoId,
-        faturado: document.getElementById('alocacao-faturado').value,
-        dataInicio,
-        dataFim,
-        percentual,
-        horasEstimadas: parseInt(document.getElementById('horas-estimadas-profissional').value) || 0,
-        horasRealizadas: parseInt(document.getElementById('horas-realizadas-profissional').value) || 0
-    };
-
-    const profissional = appState.profissionais.find(p => p.id === profissionalId);
-    const resultado = checkProfissionalDisponibilidade(profissionalId, dataInicio, dataFim, percentual, id);
-
-    const saveAlocacao = async () => {
-        // ✅ FIX: Salvar filtros ANTES de salvar a alocação
-        const filtroProf = document.getElementById('alocacoes-filter-profissional')?.value || '';
-        const filtroProj = document.getElementById('alocacoes-filter-projeto')?.value || '';
-
-        try {
-            if (id) {
-                await setDoc(doc(db, getCollectionPath('alocacoes'), id), data);
-                showNotification('Alocação atualizada com sucesso!', 'success');
-            } else {
-                await addDoc(collection(db, getCollectionPath('alocacoes')), data);
-                showNotification('Alocação adicionada com sucesso!', 'success');
-            }
-            closeModal();
-            
-            // ✅ FIX: Restaurar filtros APÓS salvar
-            setTimeout(() => {
-                if (filtroProf) document.getElementById('alocacoes-filter-profissional').value = filtroProf;
-                if (filtroProj) document.getElementById('alocacoes-filter-projeto').value = filtroProj;
-                renderAlocacoes(); // Redesenhar com filtros aplicados
-            }, 300);
-            
-            // ✅ REDESENHAR TIMELINE APÓS SALVAR
-            if (isGoogleChartsLoaded && document.querySelector('.view.active')?.id === 'timeline') {
-                console.log('🔄 Redesenhando timeline após salvar...');
-                setTimeout(() => {
-                    drawTimelineChart();
-                }, 500);
-            }
-        } catch (error) {
-            console.error('Erro ao salvar alocação:', error);
-            showNotification('Erro ao salvar alocação', 'error');
-        }
-    };
-
-    if (!resultado.disponivel) {
-        showConflictModal(profissional?.nome || 'Profissional', resultado, saveAlocacao, () => {});
-    } else {
-        await saveAlocacao();
-    }
-});
-
-    // ===== FUNÇÕES DE RENDERIZAÇÃO (ESTAVAM FALTANDO!) =====
-    
-    function renderProfissionais() {
-        const tbody = document.getElementById('profissionais-table-body');
-        if (!tbody) return;
-
-        const filterNome = document.getElementById('profissionais-filter-nome')?.value.toLowerCase() || '';
-        const filterPerfil = document.getElementById('profissionais-filter-perfil')?.value.toLowerCase() || '';
-        const filterTime = document.getElementById('profissionais-filter-time')?.value.toLowerCase() || '';
-        const filterEmpresa = document.getElementById('profissionais-filter-empresa')?.value.toLowerCase() || '';
-
-
-        let filtered = appState.profissionais;
-        if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
-        if (filterPerfil) filtered = filtered.filter(p => p.perfil.toLowerCase().includes(filterPerfil));
-        if (filterTime) filtered = filtered.filter(p => p.time.toLowerCase().includes(filterTime));
-        if (filterEmpresa) filtered = filtered.filter(p => p.empresa.toLowerCase().includes(filterEmpresa));
-
-        // ✅ ORDENAR ALFABETICAMENTE POR NOME
-        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
-        
-        const rows = filtered.map(prof => `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
-                <td class="px-6 py-4">${prof.perfil}</td>
-                <td class="px-6 py-4">${prof.time}</td>
-                <td class="px-6 py-4">${prof.empresa}</td>
-                <td class="px-6 py-4">${prof.lider}</td>
-                <td class="px-6 py-4">${prof.faturado}</td>
-                <td class="px-6 py-4">${prof.senioridade || 'N/A'}</td>
-                <td class="px-6 py-4">${prof.ativo}</td>
-                <td class="px-6 py-4">
-                    <button onclick="window.editProfissional('${prof.id}')" class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">Editar</button>
-                    <button onclick="window.deleteProfissional('${prof.id}')" class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
-                </td>
-            </tr>
-        `).join('');
-
-        tbody.innerHTML = rows || '<tr><td colspan="8" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-    }
-
-    function renderProjetos() {
-        const tbody = document.getElementById('projetos-table-body');
-        if (!tbody) return;
-
-        // Filtros
-        const filterNome = document.getElementById('projetos-filter-nome')?.value.toLowerCase() || '';
-        const filterCliente = document.getElementById('projetos-filter-cliente')?.value.toLowerCase() || '';
-        const filterStatus = document.getElementById('projetos-filter-status')?.value || '';
-
-        let filtered = appState.projetos;
-        if (filterNome) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(filterNome));
-        if (filterCliente) filtered = filtered.filter(p => p.cliente?.toLowerCase().includes(filterCliente));
-        if (filterStatus) filtered = filtered.filter(p => p.status === filterStatus);
-        
-        // ✅ ORDENAR ALFABETICAMENTE POR NOME
-        filtered.sort((a, b) => a.nome.localeCompare(b.nome));
-
-        const rows = filtered.map(proj => `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${proj.nome}</td>
-                <td class="px-6 py-4">${proj.cliente || 'N/A'}</td>
-                <td class="px-6 py-4">${proj.tipo}</td>
-                <td class="px-6 py-4">${formatDate(proj.inicioPrevisto)}</td>
-                <td class="px-6 py-4">${formatDate(proj.fimPrevisto)}</td>
-                <td class="px-6 py-4">${proj.horasEstimadasProjeto || 0}h</td>
-                <td class="px-6 py-4">
-                    <span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(proj.status)}">
-                        ${proj.status}
-                    </span>
-                </td>
-                <td class="px-6 py-4">
-                    <button onclick="window.editProjeto('${proj.id}')" class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">Editar</button>
-                    <button onclick="window.deleteProjeto('${proj.id}')" class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
-                </td>
-            </tr>
-        `).join('');
-
-        tbody.innerHTML = rows || '<tr><td colspan="8" class="text-center p-4">Nenhum projeto cadastrado.</td></tr>';
-    }
-
-    function renderAlocacoes() {
-        const tbody = document.getElementById('alocacoes-table-body');
-        if (!tbody) return;
-
-        const filterProf = document.getElementById('alocacoes-filter-profissional')?.value || '';
-        const filterProj = document.getElementById('alocacoes-filter-projeto')?.value || '';
-
-        let filtered = appState.alocacoes;
-        if (filterProf) filtered = filtered.filter(a => a.profissionalId === filterProf);
-        if (filterProj) filtered = filtered.filter(a => a.projetoId === filterProj);
-
-        // ✅ ORDENAÇÃO: Primeiro por profissional (alfabética), depois por período (data início)
-        filtered.sort((a, b) => {
-            const profA = appState.profissionais.find(p => p.id === a.profissionalId);
-            const profB = appState.profissionais.find(p => p.id === b.profissionalId);
-            
-            const nomeA = profA?.nome || '';
-            const nomeB = profB?.nome || '';
-            
-            // Comparar nomes (ordem alfabética)
-            const comparacaoNome = nomeA.localeCompare(nomeB);
-            
-            // Se os nomes são iguais, ordenar por data de início
-            if (comparacaoNome === 0) {
-                const dataA = new Date(a.dataInicio + 'T00:00:00');
-                const dataB = new Date(b.dataInicio + 'T00:00:00');
-                return dataA - dataB;
-            }
-            
-            return comparacaoNome;
-        });
-
-        const rows = filtered.map(aloc => {
-            const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
-            const proj = appState.projetos.find(p => p.id === aloc.projetoId);
-
-            return `
-                <tr class="bg-white border-b hover:bg-gray-50">
-                    <td class="px-6 py-4 font-medium text-gray-900">${prof?.nome || 'N/A'}</td>
-                    <td class="px-6 py-4">${proj?.nome || 'N/A'}</td>
-                    <td class="px-6 py-4">${formatDate(aloc.dataInicio)} - ${formatDate(aloc.dataFim)}</td>
-                    <td class="px-6 py-4">${aloc.percentual}%</td>
-                    <td class="px-6 py-4">${aloc.horasEstimadas || 0}h</td>
-                    <td class="px-6 py-4">${aloc.horasRealizadas || 0}h</td>
-                    <td class="px-6 py-4">${aloc.faturado}</td>
-                    <td class="px-6 py-4">
-                        <button onclick="window.editAlocacao('${aloc.id}')" class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">Editar</button>
-                        <button onclick="window.deleteAlocacao('${aloc.id}')" class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        tbody.innerHTML = rows || '<tr><td colspan="8" class="text-center p-4">Nenhuma alocação encontrada.</td></tr>';
-    }
-
-   function renderUsersTable() {
-    const tbody = document.getElementById('users-table-body');
-    if (!tbody) return;
-
-    const rows = appState.users.map(user => {
-        const isActive = user.active !== false; // Default true se não definido
-        const statusBadge = isActive 
-            ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Ativo</span>'
-            : '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Inativo</span>';
-
-        return `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${user.name || user.email}</td>
-                <td class="px-6 py-4">${user.email}</td>
-                <td class="px-6 py-4">
-                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                        ${(user.role || 'viewer').charAt(0).toUpperCase() + (user.role || 'viewer').slice(1)}
-                    </span>
-                </td>
-                <td class="px-6 py-4">${statusBadge}</td>
-                <td class="px-6 py-4 space-x-2">
-                    <button onclick="window.changeUserRole('${user.id}')" class="text-indigo-600 hover:text-indigo-900 font-medium">
-                        Alterar Papel
-                    </button>
-                    <button onclick="window.toggleUserStatus('${user.id}', ${!isActive})" class="text-${isActive ? 'orange' : 'green'}-600 hover:text-${isActive ? 'orange' : 'green'}-900 font-medium">
-                        ${isActive ? 'Inativar' : 'Ativar'}
-                    </button>
-                    <button onclick="window.deleteUser('${user.id}')" class="text-red-600 hover:text-red-900 font-medium">
-                        Excluir
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-
-    tbody.innerHTML = rows || '<tr><td colspan="5" class="text-center p-4">Nenhum usuário cadastrado.</td></tr>';
-}
-
-    // ===== FUNÇÕES GLOBAIS PARA OS BOTÕES =====
-    window.editProfissional = async (id) => {
-        const prof = appState.profissionais.find(p => p.id === id);
-        if (prof) openProfissionalModal(prof);
-    };
-
-    window.deleteProfissional = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
-        try {
-            await deleteDoc(doc(db, getCollectionPath('profissionais'), id));
-            showNotification('Profissional excluído com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao excluir:', error);
-            showNotification('Erro ao excluir profissional', 'error');
-        }
-    };
-
-    window.editProjeto = async (id) => {
-        const proj = appState.projetos.find(p => p.id === id);
-        if (proj) openProjetoModal(proj);
-    };
-
-    window.deleteProjeto = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este projeto?')) return;
-        try {
-            await deleteDoc(doc(db, getCollectionPath('projetos'), id));
-            showNotification('Projeto excluído com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao excluir:', error);
-            showNotification('Erro ao excluir projeto', 'error');
-        }
-    };
-
-    window.editAlocacao = async (id) => {
-        const aloc = appState.alocacoes.find(a => a.id === id);
-        if (aloc) openAlocacaoModal(aloc);
-    };
-
-    window.deleteAlocacao = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir esta alocação?')) return;
-        try {
-            await deleteDoc(doc(db, getCollectionPath('alocacoes'), id));
-            showNotification('Alocação excluída com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao excluir:', error);
-            showNotification('Erro ao excluir alocação', 'error');
-        }
-    };
-
-    window.changeUserRole = async (userId) => {
-        const user = appState.users.find(u => u.id === userId);
-        if (!user) return;
-
-        const newRole = prompt(`Alterar papel de ${user.name}:\n\nDigite 'admin', 'editor' ou 'viewer':`, user.role);
-        if (!newRole || !['admin', 'editor', 'viewer'].includes(newRole)) {
-            showNotification('Papel inválido!', 'warning');
-            return;
-        }
-
-        try {
-            await setDoc(doc(db, getCollectionPath('users'), userId), { ...user, role: newRole });
-            showNotification('Papel alterado com sucesso!', 'success');
-        } catch (error) {
-            console.error('Erro ao alterar papel:', error);
-            showNotification('Erro ao alterar papel', 'error');
-        }
-    };
-	// ✅ Função para alternar status do usuário (Ativar/Inativar)
-	window.toggleUserStatus = async (userId, newStatus) => {
-		const user = appState.users.find(u => u.id === userId);
-		if (!user) return;
-
-		const action = newStatus ? 'ativar' : 'inativar';
-		
-		if (!confirm(`Tem certeza que deseja ${action} o usuário ${user.name || user.email}?`)) {
-			return;
-		}
-
-		try {
-			await setDoc(doc(db, getCollectionPath('users'), userId), {
-				...user,
-				active: newStatus
-			});
-			showNotification(`Usuário ${newStatus ? 'ativado' : 'inativado'} com sucesso!`, 'success');
-		} catch (error) {
-			console.error('Erro ao alterar status:', error);
-			showNotification('Erro ao alterar status do usuário', 'error');
-		}
-	};
-
-// ✅ Função para excluir usuário
-// ✅ Versão alternativa se currentUserId não estiver acessível
-	window.deleteUser = async (userId) => {
-		const user = appState.users.find(u => u.id === userId);
-		if (!user) return;
-
-		// Prevenir exclusão do próprio usuário usando auth.currentUser
-		if (userId === auth.currentUser?.uid) {
-			showNotification('Você não pode excluir seu próprio usuário!', 'warning');
-			return;
-		}
-
-		const confirmText = `ATENÇÃO: Tem certeza que deseja EXCLUIR permanentemente o usuário ${user.name || user.email}?\n\nEsta ação não pode ser desfeita!\n\nDigite "EXCLUIR" para confirmar:`;
-		
-		const confirmation = prompt(confirmText);
-		
-		if (confirmation !== 'EXCLUIR') {
-			showNotification('Exclusão cancelada', 'info');
-			return;
-		}
-
-		try {
-			await deleteDoc(doc(db, getCollectionPath('users'), userId));
-			showNotification('Usuário excluído com sucesso!', 'success');
-		} catch (error) {
-			console.error('Erro ao excluir usuário:', error);
-			showNotification('Erro ao excluir usuário', 'error');
-		}
-	};
-
     // Event listeners de filtros
     document.getElementById('profissionais-filter-nome')?.addEventListener('input', debounce(renderProfissionais, 300));
     document.getElementById('profissionais-filter-perfil')?.addEventListener('input', debounce(renderProfissionais, 300));
@@ -1252,67 +363,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     
     document.getElementById('esforco-filter-projeto')?.addEventListener('input', debounce(updateEffortTable, 300));
     
-    document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
-    document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
-
     // ===== POPULADORES DE FILTROS =====
-    
-    function populateDashboardFilters() {
-        const times = [...new Set(appState.profissionais.map(p => p.time))].sort();
-        const lideres = [...new Set(appState.profissionais.map(p => p.lider))].sort();
-        
-        ['dashboard-filter-time', 'project-dashboard-filter-time'].forEach(id => {
-            const select = document.getElementById(id);
-            if (select) {
-                select.innerHTML = '<option value="">Todos os Times</option>' + 
-                    times.map(t => `<option value="${t}">${t}</option>`).join('');
-            }
-        });
 
-        ['dashboard-filter-lider', 'project-dashboard-filter-lider'].forEach(id => {
-            const select = document.getElementById(id);
-            if (select) {
-                select.innerHTML = '<option value="">Todos Líderes</option>' + 
-                    lideres.map(l => `<option value="${l}">${l}</option>`).join('');
-            }
-        });
-
-        const projetoSelect = document.getElementById('dashboard-filter-projeto');
-        if (projetoSelect) {
-            const projetos = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
-            projetoSelect.innerHTML = '<option value="">Todos Projetos</option>' +
-                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        const statusContainer = document.getElementById('project-dashboard-filter-status');
-        if (statusContainer) {
-            const statuses = ['Não Iniciado', 'Em Andamento', 'Concluído', 'Atrasado', 'Em Pausa'];
-            statusContainer.innerHTML = statuses.map(s => `
-                <label class="inline-flex items-center">
-                    <input type="checkbox" class="project-status-filter form-checkbox text-indigo-600" value="${s}">
-                    <span class="ml-2 text-sm">${s}</span>
-                </label>
-            `).join('');
-
-            document.querySelectorAll('.project-status-filter').forEach(cb => {
-                cb.addEventListener('change', () => {
-                    if (typeof updateDashboard === 'function') updateDashboard();
-                });
-            });
-        }
-    }
-
-    // ✅ FUNÇÃO NÃO MAIS NECESSÁRIA - Filtros agora são inputs de texto
-    function populateProfissionaisFilters() {
-        // Removido: Time e Empresa agora são campos de texto, não dropdowns
-    }
 
     function populateAvailabilityChartFilters() {
         const profSelect = document.getElementById('availability-chart-prof-filter');
         const perfilSelect = document.getElementById('availability-chart-perfil-filter');
 
         if (profSelect) {
-            const profissionaisAtivos = appState.profissionais
+            const profissionaisAtivos = getProfissionais()
                 .filter(p => p.ativo !== 'Não')
                 .sort((a, b) => a.nome.localeCompare(b.nome));
             profSelect.innerHTML = '<option value="">Todos</option>' +
@@ -1320,7 +379,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
 
         if (perfilSelect) {
-            const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
+            const perfis = [...new Set(getProfissionais().map(p => p.perfil))].sort();
             perfilSelect.innerHTML = '<option value="">Todos Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
         }
@@ -1329,69 +388,12 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     function populateProfileFilters() {
         const profileSelect = document.getElementById('availability-filter-profile');
         if (profileSelect) {
-            const perfis = [...new Set(appState.profissionais.map(p => p.perfil))].sort();
+            const perfis = [...new Set(getProfissionais().map(p => p.perfil))].sort();
             profileSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
                 perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
         }
     }
 
-    function populateAlocacoesFilters() {
-        const profSelect = document.getElementById('alocacoes-filter-profissional');
-        const projSelect = document.getElementById('alocacoes-filter-projeto');
-
-        if (profSelect) {
-            const profissionaisAtivos = appState.profissionais
-                .filter(p => p.ativo !== 'Não')
-                .sort((a, b) => a.nome.localeCompare(b.nome));
-
-            profSelect.innerHTML = '<option value="">Todos Profissionais</option>' +
-                profissionaisAtivos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (projSelect) {
-            const projetos = appState.projetos.sort((a, b) => a.nome.localeCompare(b.nome));
-            projSelect.innerHTML = '<option value="">Todos Projetos</option>' +
-                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-    }
-
-    function populateTimelineFilters() {
-        const profSelect = document.getElementById('timeline-filter-profissional');
-        const projSelect = document.getElementById('timeline-filter-projeto');
-        const perfilSelect = document.getElementById('timeline-filter-perfil');
-
-        if (profSelect) {
-            // ✅ Filtrar apenas profissionais ATIVOS e ordenar alfabeticamente
-            const profissionaisAtivosOrdenados = [...appState.profissionais]
-                .filter(p => p.ativo !== 'Não' && p.nome) // Apenas ativos com nome válido
-                .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-            profSelect.innerHTML = '<option value="">Todos</option>' +
-                profissionaisAtivosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (projSelect) {
-            const projetosOrdenados = [...appState.projetos].sort((a, b) => a.nome.localeCompare(b.nome));
-            projSelect.innerHTML = '<option value="">Todos</option>' +
-                projetosOrdenados.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-        }
-
-        if (perfilSelect) {
-            // ✅ Filtrar perfis apenas de profissionais ATIVOS
-            const perfis = [...new Set(appState.profissionais
-                .filter(p => p.ativo !== 'Não')
-                .map(p => p.perfil)
-                .filter(pf => pf) // Remover undefined/null
-            )].sort();
-            perfilSelect.innerHTML = '<option value="">Todos</option>' +
-                perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
-        }
-
-        [profSelect, projSelect, perfilSelect].forEach(select => {
-            select?.addEventListener('change', () => {
-                if (isGoogleChartsLoaded) drawTimelineChart();
-            });
-        });
-    }
 
 // ===== FIM DA PARTE 2 =====
 // ===== PARTE 3 - DASHBOARD, GRÁFICOS E TIMELINE =====
@@ -1399,13 +401,13 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     // ===== DASHBOARD =====
     let updateDashboard = function() {
         // Métricas principais
-        const totalProfissionais = appState.profissionais.filter(p => p.ativo !== 'Não').length;
-        const totalProjetos = appState.projetos.length;
+        const totalProfissionais = getProfissionais().filter(p => p.ativo !== 'Não').length;
+        const totalProjetos = getProjetos().length;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const alocacoesAtivas = appState.alocacoes.filter(a => {
+        const alocacoesAtivas = getAlocacoes().filter(a => {
             const inicio = new Date(a.dataInicio + 'T00:00:00');
             const fim = new Date(a.dataFim + 'T00:00:00');
             return inicio <= today && fim >= today;
@@ -1466,14 +468,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         periodoFim.setHours(23, 59, 59, 999);
     }
 
-    let filtered = appState.profissionais.filter(p => p.ativo !== 'Não');
+    let filtered = getProfissionais().filter(p => p.ativo !== 'Não');
 
     if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
     if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
     if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
 
     const rows = filtered.map(prof => {
-        let alocacoes = appState.alocacoes.filter(a => a.profissionalId === prof.id);
+        let alocacoes = getAlocacoes().filter(a => a.profissionalId === prof.id);
 
         if (filterProjeto) {
             alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
@@ -1518,7 +520,7 @@ forms.alocacao?.addEventListener('submit', async (e) => {
                            'text-yellow-600';
 
         const projetos = alocacoes.map(a => {
-            const proj = appState.projetos.find(p => p.id === a.projetoId);
+            const proj = getProjetos().find(p => p.id === a.projetoId);
             return proj?.nome || 'N/A';
         });
         const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
@@ -1597,17 +599,17 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         
         const selectedStatuses = Array.from(document.querySelectorAll('.project-status-filter:checked')).map(cb => cb.value);
 
-        let filtered = appState.projetos;
+        let filtered = getProjetos();
 
         if (selectedStatuses.length > 0) {
             filtered = filtered.filter(p => selectedStatuses.includes(p.status));
         }
 
         const rows = filtered.map(proj => {
-            const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
+            const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
             
             const profissionaisAlocados = alocacoes.map(a => {
-                const prof = appState.profissionais.find(p => p.id === a.profissionalId);
+                const prof = getProfissionais().find(p => p.id === a.profissionalId);
                 if (!prof) return null;
                 
                 if (filterNome && !prof.nome.toLowerCase().includes(filterNome)) return null;
@@ -1651,13 +653,13 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         const filterStatusFim = document.getElementById('prazos-filter-status-fim')?.value || '';
         const filterStatusProjeto = document.getElementById('prazos-filter-status-projeto')?.value || '';
 
-        let filtered = appState.projetos;
-        
+        let filtered = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
         // Filtro por nome do projeto
         if (filterProjeto) {
             filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
         }
-        
+
         // Filtro por status do projeto
         if (filterStatusProjeto) {
             filtered = filtered.filter(p => p.status === filterStatusProjeto);
@@ -1737,15 +739,15 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         // ✅ APLICAR FILTRO
         const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
 
-        let filtered = appState.projetos;
-        
+        let filtered = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
         // Filtro por nome do projeto
         if (filterProjeto) {
             filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
         }
 
         const rows = filtered.map(proj => {
-            const alocacoes = appState.alocacoes.filter(a => a.projetoId === proj.id);
+            const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
             
             const horasEstimadasProj = proj.horasEstimadasProjeto || 0;
             const horasAlocadas = alocacoes.reduce((sum, a) => sum + (parseInt(a.horasEstimadas) || 0), 0);
@@ -1798,296 +800,26 @@ forms.alocacao?.addEventListener('submit', async (e) => {
         }
     });
 
+    // Listener delegado para checkboxes de status (criados dinamicamente)
+    document.getElementById('project-dashboard-filter-status')?.addEventListener('change', updateDashboard);
+
     // ===== GRÁFICOS =====
-    function updateProfileChart() {
-        const canvas = document.getElementById('profile-distribution-chart');
-        if (!canvas) return;
-
-        // ✅ Verificar se o canvas está visível
-        const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-        if (!isVisible) {
-            console.log('⏳ Canvas do perfil não visível, tentando novamente...');
-            setTimeout(updateProfileChart, 200);
-            return;
-        }
-
-        const profiles = {};
-        appState.profissionais.filter(p => p.ativo !== 'Não').forEach(p => {
-            profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
-        });
-
-        const labels = Object.keys(profiles);
-        const data = Object.values(profiles);
-        const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
-        if (profileChart) {
-            profileChart.destroy();
-            profileChart = null;
-        }
-
-        // ✅ Forçar dimensões do container antes de criar o gráfico
-        const container = canvas.parentElement;
-        container.style.height = '320px';
-        container.style.width = '100%';
-
-        profileChart = new Chart(canvas, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: colors.slice(0, labels.length),
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: {
-                    padding: {
-                        top: 40,
-                        bottom: 40,
-                        left: 20,
-                        right: 20
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        align: 'center',
-                        labels: { 
-                            padding: 12,
-                            font: { size: 11 },
-                            boxWidth: 12,
-                            boxHeight: 12,
-                            usePointStyle: true,
-                            generateLabels: function(chart) {
-                                const data = chart.data;
-                                if (data.labels.length && data.datasets.length) {
-                                    return data.labels.map((label, i) => {
-                                        const meta = chart.getDatasetMeta(0);
-                                        const style = meta.controller.getStyle(i);
-                                        return {
-                                            text: label,
-                                            fillStyle: style.backgroundColor,
-                                            strokeStyle: style.borderColor,
-                                            lineWidth: style.borderWidth,
-                                            hidden: false,
-                                            index: i
-                                        };
-                                    });
-                                }
-                                return [];
-                            }
-                        },
-                        maxWidth: 1000,
-                        display: true
-                    },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 14 },
-                        formatter: (value) => value,
-                        anchor: 'center',
-                        align: 'center' 
-                    }
-                }
-            },
-            plugins: [ChartDataLabels]
-        });
-
-        console.log('✅ Gráfico de perfil renderizado');
-    }
-
-    function updateMonthlyAvailabilityChart() {
-    const canvas = document.getElementById('monthly-availability-chart');
-    if (!canvas) return;
-
-    // ✅ FIX: Verificar se o canvas está visível antes de desenhar
-    const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-    if (!isVisible) {
-        console.log('⏳ Canvas não visível ainda, agendando redesenho...');
-        setTimeout(updateMonthlyAvailabilityChart, 200);
-        return;
-    }
+    // Inicializar seletor de mês com mês atual
     const monthSelector = document.getElementById('availability-month-selector');
-    const profFilter = document.getElementById('availability-chart-prof-filter')?.value || '';
-    const perfilFilter = document.getElementById('availability-chart-perfil-filter')?.value || '';
-
-    if (!monthSelector) return;
-
-    if (!monthSelector.value) {
+    if (monthSelector) {
         const today = new Date();
-        monthSelector.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        monthSelector.value = `${year}-${month}`;
+        
+        // Chamar função para renderizar o gráfico com mês atual
+        updateMonthlyAvailabilityChart();
     }
 
-    const [year, month] = monthSelector.value.split('-');
-    const firstDay = new Date(parseInt(year), parseInt(month) - 1, 1);
-    const lastDay = new Date(parseInt(year), parseInt(month), 0);
-
-    let profissionais = appState.profissionais.filter(p => p.ativo !== 'Não');
-    if (profFilter) profissionais = profissionais.filter(p => p.id === profFilter);
-    if (perfilFilter) profissionais = profissionais.filter(p => p.perfil === perfilFilter);
-
-    profissionais.sort((a, b) => a.nome.localeCompare(b.nome));
-
-    const labels = profissionais.map(p => p.nome);
-    const horasAlocadas = profissionais.map(prof => {
-        const alocacoes = appState.alocacoes.filter(a => {
-            if (a.profissionalId !== prof.id) return false;
-            const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-            const alocFim = new Date(a.dataFim + 'T00:00:00');
-            return alocInicio <= lastDay && alocFim >= firstDay;
-        });
-
-        return alocacoes.reduce((sum, a) => {
-            const alocInicio = new Date(a.dataInicio + 'T00:00:00');
-            const alocFim = new Date(a.dataFim + 'T00:00:00');
-            const inicio = alocInicio < firstDay ? firstDay : alocInicio;
-            const fim = alocFim > lastDay ? lastDay : alocFim;
-            
-            const diasUteis = calcularDiasUteis(
-                inicio.toISOString().split('T')[0],
-                fim.toISOString().split('T')[0]
-            );
-            
-            return sum + (diasUteis * ((parseFloat(a.percentual) || 0) / 100) * 8);
-        }, 0);
-    });
-
-    if (monthlyAvailabilityChart) monthlyAvailabilityChart.destroy();
-
-    // ✅ FIX: Sempre resetar e recalcular altura antes de criar novo gráfico
-    const minHeight = 500;
-    const pixelsPorProfissional = 45;
-    const alturaCalculada = Math.max(minHeight, profissionais.length * pixelsPorProfissional);
-    
-    // ✅ FIX: Limpar estilo anterior e aplicar novo
-    canvas.style.removeProperty('height');
-    canvas.height = alturaCalculada;
-    canvas.style.height = `${alturaCalculada}px`;
-
-    // ✅ FIX: Garantir que o container pai não tenha altura fixa
-    const container = canvas.parentElement;
-    if (container) {
-        container.style.removeProperty('height');
-        container.style.height = 'auto';
-    }
-
-    monthlyAvailabilityChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Horas Alocadas',
-                data: horasAlocadas,
-                backgroundColor: '#4f46e5',
-                borderColor: '#4338ca',
-                borderWidth: 1,
-                barThickness: 'flex',
-                maxBarThickness: 35,  // ✅ REDUZIDO de 40 para 35
-                categoryPercentage: 0.7,  // ✅ ADICIONADO - Controla espaço a área de cada barra
-                barPercentage: 0.5        // ✅ ADICIONADO - Controla largura da barra
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    left: 20,    // ✅ AUMENTADO de 15 para 20
-                    right: 40,   // ✅ AUMENTADO de 30 para 40
-                    top: 20,     // ✅ AUMENTADO de 15 para 20
-                    bottom: 20   // ✅ AUMENTADO de 15 para 20
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    anchor: 'end',
-                    align: 'end',
-                    offset: 4,
-                    formatter: (value) => value > 0 ? `${Math.round(value)}h` : '',
-                    font: { 
-                        weight: 'bold', 
-                        size: 11  // ✅ Fonte
-                    },
-                    color: '#1f2937'
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `${Math.round(context.parsed.x)}h alocadas`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    ticks: { 
-                        callback: (value) => `${value}h`,
-                        font: { size: 10 }  // ✅ REDUZIDO de 11 para 10
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    }
-                },
-                y: {
-                    ticks: {
-                        autoSkip: false,
-                        font: { 
-                            size: 11  // ✅ Mudou de 10 para 11
-                        },
-                        padding: 15,  // ✅ Mudou de 10 para 15
-                        color: '#374151',
-                        // ✅ TRUNCAR NOMES LONGOS
-                        callback: function(value, index) {
-                            const label = this.getLabelForValue(value);
-                            if (label.length > 30) {
-                                return label.substring(0, 27) + '...';
-                            }
-                            return label;
-                        }
-                    },
-                    grid: {
-                        display: false
-                    }
-                }
-            }
-        },
-        plugins: [ChartDataLabels]
-    });
-	setTimeout(() => {
-        if (monthlyAvailabilityChart) {
-            monthlyAvailabilityChart.resize();
-            monthlyAvailabilityChart.update('none'); // Update sem animação
-        }
-    }, 150);
-	
-
-    // ✅ MENSAGEM SE MUITOS PROFISSIONAIS
-    const messageDiv = document.getElementById('chart-info-message');
-    if (messageDiv) {
-        messageDiv.remove();
-    }
-
-    if (profissionais.length > 50) {
-        const infoMessage = document.createElement('div');
-        infoMessage.id = 'chart-info-message';
-        infoMessage.className = 'bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3 text-sm text-blue-800';
-        infoMessage.innerHTML = `
-            <strong>💡 Dica:</strong> Há ${profissionais.length} profissionais no gráfico. 
-            Use os filtros acima para visualizar grupos menores e facilitar a leitura.
-        `;
-        canvas.parentElement.appendChild(infoMessage);
-    }
-}
-
-    document.getElementById('availability-month-selector')?.addEventListener('change', updateMonthlyAvailabilityChart);
-    document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
-    document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
+// Listeners para atualização do gráfico
+document.getElementById('availability-month-selector')?.addEventListener('change', updateMonthlyAvailabilityChart);
+document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
+document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
 
     
     // ===== BUSCA DE DISPONIBILIDADE =====
@@ -2107,14 +839,14 @@ forms.alocacao?.addEventListener('submit', async (e) => {
             return;
         }
 
-        let profissionais = appState.profissionais.filter(p => p.ativo !== 'Não');
+        let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
         if (profile) profissionais = profissionais.filter(p => p.perfil === profile);
 
         const periodoInicio = new Date(startDate + 'T00:00:00');
         const periodoFim = new Date(endDate + 'T00:00:00');
 
         const disponibilidades = profissionais.map(prof => {
-            const alocacoes = appState.alocacoes.filter(a => {
+            const alocacoes = getAlocacoes().filter(a => {
                 if (a.profissionalId !== prof.id) return false;
                 const alocInicio = new Date(a.dataInicio + 'T00:00:00');
                 const alocFim = new Date(a.dataFim + 'T00:00:00');
@@ -2374,943 +1106,24 @@ forms.alocacao?.addEventListener('submit', async (e) => {
     });
    
 
-    // ===== TIMELINE =====
-function drawTimelineChart() {
-    const container = document.getElementById('timeline-chart-container');
-    if (!container || !isGoogleChartsLoaded) return;
-
-    const filterProf = document.getElementById('timeline-filter-profissional')?.value || '';
-    const filterProj = document.getElementById('timeline-filter-projeto')?.value || '';
-    const filterPerfil = document.getElementById('timeline-filter-perfil')?.value || '';
-
-    let alocacoes = appState.alocacoes.filter(a => {
-        // ✅ Buscar profissional para validações
-        const prof = appState.profissionais.find(p => p.id === a.profissionalId);
-
-        // ✅ FILTRO 1: Apenas profissionais ATIVOS e com nome válido
-        if (!prof || prof.ativo === 'Não' || !prof.nome) return false;
-
-        if (filterProf && a.profissionalId !== filterProf) return false;
-        if (filterProj && a.projetoId !== filterProj) return false;
-
-        if (filterPerfil) {
-            if (prof.perfil !== filterPerfil) return false;
-        }
-
-        return true;
-    });
-
-    // ✅ ORDENAR alocações por nome do profissional (alfabeticamente)
-    alocacoes.sort((a, b) => {
-        const profA = appState.profissionais.find(p => p.id === a.profissionalId);
-        const profB = appState.profissionais.find(p => p.id === b.profissionalId);
-        return (profA?.nome || '').localeCompare(profB?.nome || '');
-    });
-
-    if (alocacoes.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 pt-16">Nenhuma alocação encontrada para os filtros selecionados.</p>';
-        return;
-    }
-
-    const dataTable = new google.visualization.DataTable();
-    dataTable.addColumn({ type: 'string', id: 'Resource' });
-    dataTable.addColumn({ type: 'string', id: 'Name' });
-    dataTable.addColumn({ type: 'string', role: 'tooltip', p: { html: true } });
-    dataTable.addColumn({ type: 'date', id: 'Start' });
-    dataTable.addColumn({ type: 'date', id: 'End' });
-    dataTable.addColumn({ type: 'string', role: 'style' });
-
-    // ✅ ADICIONAR LINHA INVISÍVEL PARA FORÇAR "HOJE" NO RANGE
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    // ✅ Linha invisível com caractere zero-width space (invisível)
-    const invisibleChar = '\u200B'; // Zero-Width Space - caractere Unicode invisível
-    dataTable.addRow([
-        invisibleChar, // Resource invisível
-        invisibleChar, // Name invisível
-        '', // Tooltip vazio
-        today, // Start = hoje
-        todayEnd, // End = hoje (mesmo dia)
-        'opacity: 0; height: 0;' // ✅ INVISÍVEL
-    ]);
-
-    console.log('📅 Linha invisível adicionada para forçar "hoje" no range:', today.toLocaleDateString());
-
-    // Adicionar as alocações normais
-    alocacoes.forEach(aloc => {
-        const prof = appState.profissionais.find(p => p.id === aloc.profissionalId);
-        const proj = appState.projetos.find(p => p.id === aloc.projetoId);
-
-        // ✅ Validar profissional, projeto e nomes (evitar "undefined")
-        if (!prof || !proj) return;
-        if (!prof.nome || !proj.nome) return;
-
-        const profNome = prof.nome;
-        const projNome = proj.nome;
-        const inicio = new Date(aloc.dataInicio + 'T00:00:00');
-        const fim = new Date(aloc.dataFim + 'T00:00:00');
-
-        const tooltip = `
-            <div style="padding: 10px; font-family: Arial, sans-serif;">
-                <strong>${profNome}</strong><br/>
-                <strong>Projeto:</strong> ${projNome}<br/>
-                <strong>Período:</strong> ${formatDate(aloc.dataInicio)} - ${formatDate(aloc.dataFim)}<br/>
-                <strong>Alocação:</strong> ${aloc.percentual}%<br/>
-                <strong>Horas:</strong> ${aloc.horasEstimadas || 0}h estimadas / ${aloc.horasRealizadas || 0}h realizadas
-            </div>
-        `;
-
-        dataTable.addRow([
-            profNome, 
-            projNome, 
-            tooltip, 
-            inicio, 
-            fim,
-            null // Sem estilo especial (visível normalmente)
-        ]);
-    });
-
-    const options = {
-        timeline: {
-            showRowLabels: true,
-            showBarLabels: true,
-            groupByRowLabel: true,
-            colorByRowLabel: false
-        },
-        avoidOverlappingGridLines: false,
-        tooltip: { isHtml: true },
-        backgroundColor: '#ffffff',
-        height: Math.max(600, (alocacoes.length + 1) * 50) // +1 pela linha invisível
-    };
-
-    container.innerHTML = '';
-    const chart = new google.visualization.Timeline(container);
-    
-    google.visualization.events.addListener(chart, 'select', function() {
-        const selection = chart.getSelection();
-        if (selection.length > 0) {
-            const row = selection[0].row;
-            // ✅ Ignorar a primeira linha (invisível)
-            if (row === 0) return;
-            
-            const alocacao = alocacoes[row - 1]; // -1 porque a primeira é invisível
-            if (alocacao) {
-                openedFromTimeline = true;
-                openAlocacaoModal(alocacao);
-            }
-        }
-    });
-
-    chart.draw(dataTable, options);
-
-    // ✅ OCULTAR LINHA "undefined" após renderização
-    function hideUndefinedLabel() {
-        const svg = container.querySelector('svg');
-        if (!svg) return;
-
-        const textElements = svg.querySelectorAll('text');
-        textElements.forEach(text => {
-            const content = text.textContent?.trim();
-            if (content === 'undefined' || content === '' || !content) {
-                // Ocultar o texto "undefined" ou vazio
-                text.textContent = '';
-                text.style.visibility = 'hidden';
-            }
-        });
-
-        // ✅ Também ocultar a primeira linha da tabela se for a invisível
-        const rows = svg.querySelectorAll('g > rect');
-        if (rows.length > 0) {
-            const firstRowRect = rows[0];
-            if (firstRowRect && firstRowRect.getAttribute('fill') === 'none') {
-                firstRowRect.style.display = 'none';
-            }
-        }
-
-        console.log('✅ Label "undefined" ocultado do gráfico');
-    }
-
-    setTimeout(hideUndefinedLabel, 100);
-    setTimeout(hideUndefinedLabel, 300);
-    setTimeout(hideUndefinedLabel, 600);
-
-    // ✅ SEMPRE ADICIONAR LINHA "HOJE"
-    console.log('⏳ Aguardando renderização do gráfico...');
-    setTimeout(() => {
-        addTodayLineToTimeline(container, alocacoes);
-    }, 500);
-}
-
-function addTodayLineToTimeline(container, alocacoes) {
-    const svg = container.querySelector('svg');
-    if (!svg) {
-        console.log('⏳ SVG não encontrado, tentando novamente...');
-        setTimeout(() => addTodayLineToTimeline(container, alocacoes), 300);
-        return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Remover linha antiga se existir
-    const oldLine = svg.querySelector('.today-line');
-    if (oldLine) oldLine.remove();
-
-    // ✅ ESTRATÉGIA: Usar labels do eixo X para calcular escala precisa
-    const textElements = svg.querySelectorAll('text');
-    const monthMap = { 'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
-                       'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11 };
-
-    // Coletar labels de mês e ano
-    const axisLabels = [];
-    let lastYear = new Date().getFullYear();
-
-    textElements.forEach(text => {
-        const content = text.textContent.trim();
-        const x = parseFloat(text.getAttribute('x'));
-        if (isNaN(x)) return;
-
-        // Verificar se é um ano (ex: "2025", "2026")
-        if (/^\d{4}$/.test(content)) {
-            lastYear = parseInt(content);
-            axisLabels.push({ x, type: 'year', year: lastYear });
-        }
-
-        // Verificar se é um mês (ex: "jan.", "fev.")
-        const monthKey = content.toLowerCase().replace('.', '').substring(0, 3);
-        if (monthMap.hasOwnProperty(monthKey)) {
-            axisLabels.push({ x, type: 'month', month: monthMap[monthKey], text: content });
-        }
-    });
-
-    // Ordenar por posição X
-    axisLabels.sort((a, b) => a.x - b.x);
-
-    // Associar anos aos meses (cada mês herda o último ano visto)
-    let currentYear = 2025; // default
-    axisLabels.forEach(label => {
-        if (label.type === 'year') {
-            currentYear = label.year;
-        } else if (label.type === 'month') {
-            label.year = currentYear;
-            // Se já passamos de dezembro e voltamos pra janeiro, incrementa o ano
-            const prevMonth = axisLabels.filter(l => l.type === 'month' && l.x < label.x).pop();
-            if (prevMonth && prevMonth.month > label.month) {
-                label.year = prevMonth.year + 1;
-                currentYear = label.year;
-            }
-        }
-    });
-
-    const monthLabels = axisLabels.filter(l => l.type === 'month' && l.year);
-    console.log('📅 Labels de mês com ano:', monthLabels.map(l => `${l.text}/${l.year} @${l.x.toFixed(0)}`));
-
-    // ✅ Calcular escala usando dois labels de mês consecutivos
-    let pixelsPerDay = null;
-    let refLabel = null;
-
-    for (let i = 0; i < monthLabels.length - 1; i++) {
-        const l1 = monthLabels[i];
-        const l2 = monthLabels[i + 1];
-
-        const date1 = new Date(l1.year, l1.month, 1);
-        const date2 = new Date(l2.year, l2.month, 1);
-        const daysBetween = (date2 - date1) / (1000 * 60 * 60 * 24);
-        const pixelsBetween = l2.x - l1.x;
-
-        if (daysBetween > 0 && pixelsBetween > 0) {
-            pixelsPerDay = pixelsBetween / daysBetween;
-            refLabel = l1;
-            console.log(`📐 Escala: ${pixelsBetween.toFixed(0)}px / ${daysBetween} dias = ${pixelsPerDay.toFixed(2)} px/dia`);
-            break;
-        }
-    }
-
-    if (!pixelsPerDay || !refLabel) {
-        console.warn('⚠️ Não foi possível calcular escala precisa');
-        return;
-    }
-
-    // ✅ Calcular posição de "hoje"
-    const refDate = new Date(refLabel.year, refLabel.month, 1);
-    const daysFromRef = (today - refDate) / (1000 * 60 * 60 * 24);
-    const xPosition = refLabel.x + (daysFromRef * pixelsPerDay);
-
-    console.log('📅 Referência:', refDate.toLocaleDateString(), '@ x =', refLabel.x.toFixed(0));
-    console.log('📅 Hoje:', today.toLocaleDateString());
-    console.log('📅 Dias desde ref:', daysFromRef.toFixed(0));
-    console.log(`📍 Posição calculada: x = ${xPosition.toFixed(0)}`);
-
-    // ✅ Calcular área Y do gráfico pelas barras
-    const allBars = svg.querySelectorAll('rect');
-    let minY = Infinity, maxY = 0;
-
-    allBars.forEach(bar => {
-        const fill = bar.getAttribute('fill');
-        const height = parseFloat(bar.getAttribute('height') || 0);
-        const y = parseFloat(bar.getAttribute('y') || 0);
-        // Barras de dados têm altura entre 15 e 50px geralmente
-        if (fill && fill !== 'none' && fill !== '#ffffff' && fill !== 'white' && height > 10 && height < 60) {
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y + height);
-        }
-    });
-
-    if (minY === Infinity) { minY = 50; maxY = 400; }
-
-    const chartY = minY;
-    const chartHeight = maxY - minY;
-
-    // ✅ CRIAR ELEMENTOS SVG COM VALIDAÇÃO
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.classList.add('today-line');
-    g.style.pointerEvents = 'none';
-
-    // Fundo semi-transparente
-    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bgRect.setAttribute('x', xPosition - 15);
-    bgRect.setAttribute('y', chartY);
-    bgRect.setAttribute('width', '30');
-    bgRect.setAttribute('height', chartHeight);
-    bgRect.setAttribute('fill', '#fee2e2');
-    bgRect.setAttribute('opacity', '0.3');
-
-    // Linha vertical
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', xPosition);
-    line.setAttribute('y1', chartY);
-    line.setAttribute('x2', xPosition);
-    line.setAttribute('y2', chartY + chartHeight);
-    line.setAttribute('stroke', '#dc2626');
-    line.setAttribute('stroke-width', '3');
-    line.setAttribute('opacity', '0.8');
-
-    // Label "Hoje" com fundo
-    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    labelBg.setAttribute('x', xPosition + 8);
-    labelBg.setAttribute('y', chartY + 5);
-    labelBg.setAttribute('width', '50');
-    labelBg.setAttribute('height', '24');
-    labelBg.setAttribute('fill', 'white');
-    labelBg.setAttribute('stroke', '#dc2626');
-    labelBg.setAttribute('stroke-width', '2');
-    labelBg.setAttribute('rx', '4');
-
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', xPosition + 33);
-    label.setAttribute('y', chartY + 22);
-    label.setAttribute('fill', '#dc2626');
-    label.setAttribute('font-size', '14');
-    label.setAttribute('font-weight', 'bold');
-    label.setAttribute('text-anchor', 'middle');
-    label.textContent = 'Hoje';
-
-    // Adicionar tudo ao grupo
-    g.appendChild(bgRect);
-    g.appendChild(line);
-    g.appendChild(labelBg);
-    g.appendChild(label);
-
-    // Adicionar ao SVG
-    svg.appendChild(g);
-
-    console.log('🎉 Linha "Hoje" adicionada com sucesso!');
-}
-        // ===== ⭐ INÍCIO: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
-    const kimaiFileInput = document.getElementById('kimai-file-input');
-    const selectedFileInfo = document.getElementById('selected-file-info');
-    const processKimaiBtn = document.getElementById('process-kimai-btn');
-    const removeFileBtn = document.getElementById('remove-file-btn');
-    let selectedFile = null;
-
-    // Drag and drop
-    const dropArea = kimaiFileInput?.parentElement?.parentElement;
-    if (dropArea) {
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.add('border-indigo-500', 'bg-indigo-50');
-            });
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.remove('border-indigo-500', 'bg-indigo-50');
-            });
-        });
-
-        dropArea.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFileSelect(files[0]);
-            }
-        });
-    }
-
-    // Seleção de arquivo
-    kimaiFileInput?.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelect(e.target.files[0]);
-        }
-    });
-
-    // Remover arquivo
-    removeFileBtn?.addEventListener('click', () => {
-        selectedFile = null;
-        kimaiFileInput.value = '';
-        selectedFileInfo?.classList.add('hidden');
-        processKimaiBtn?.classList.add('hidden');
-    });
-
-    // Processar importação
-    processKimaiBtn?.addEventListener('click', async () => {
-        if (selectedFile) {
-            await processKimaiImport(selectedFile);
-        }
-    });
-
-    function handleFileSelect(file) {
-        const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
-        if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
-            showNotification('Por favor, selecione um arquivo Excel válido (.xlsx ou .xls)', 'error');
-            return;
-        }
-
-        if (file.size > 10 * 1024 * 1024) {
-            showNotification('Arquivo muito grande! Máximo: 10MB', 'error');
-            return;
-        }
-
-        selectedFile = file;
-
-        const fileName = document.getElementById('file-name');
-        const fileSize = document.getElementById('file-size');
-        
-        if (fileName) fileName.textContent = file.name;
-        if (fileSize) fileSize.textContent = formatFileSize(file.size);
-        
-        selectedFileInfo?.classList.remove('hidden');
-        processKimaiBtn?.classList.remove('hidden');
-    }
-
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    }
-
-    async function processKimaiImport(file) {
-        try {
-            showNotification('Processando arquivo...', 'info');
-            processKimaiBtn.disabled = true;
-            processKimaiBtn.innerHTML = '<span class="loading-inline mr-2"></span>Processando...';
-
-            const data = await readExcelFile(file);
-            
-            if (!data || data.length === 0) {
-                throw new Error('Arquivo vazio ou formato inválido');
-            }
-
-            console.log('📊 Dados lidos do Excel:', data.length, 'linhas');
-
-            const result = await processKimaiData(data);
-
-            displayImportResults(result);
-
-            showNotification(`✅ Importação concluída! ${result.updated} alocações atualizadas.`, 'success');
-
-        } catch (error) {
-            console.error('❌ Erro na importação:', error);
-            showNotification('Erro ao processar arquivo: ' + error.message, 'error');
-        } finally {
-            processKimaiBtn.disabled = false;
-            processKimaiBtn.innerHTML = `
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                </svg>
-                Processar Importação
-            `;
-        }
-    }
-
-    function readExcelFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    
-                    // ✅ CORREÇÃO: Usar objetos em vez de arrays
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, {
-                        raw: false,  // Converter tudo para string
-                        defval: ''   // Valores vazios como string vazia
-                    });
-                    
-                    console.log('📊 Registros lidos:', jsonData.length);
-                    console.log('📋 Primeiras colunas:', Object.keys(jsonData[0] || {}));
-                    
-                    resolve(jsonData);
-                } catch (error) {
-                    reject(new Error('Erro ao ler arquivo Excel: ' + error.message));
-                }
-            };
-            
-            reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    // ===== ⭐ PROCESSAMENTO v2.0 - GRANULAR POR DATA =====
-    async function processKimaiData(excelData) {
-        const result = {
-            processed: 0,
-            updated: 0,
-            skipped: 0,
-            errors: [],
-            details: []
-        };
-
-        console.log('🔍 Processando', excelData.length, 'registros...');
-
-        // ✅ NOVO: Processar diretamente os objetos JSON
-        const registrosPorAlocacao = new Map();
-
-        for (const row of excelData) {
-            const nomeProjeto = String(row['Projeto'] || '').trim();
-            const nomeUsuario = String(row['Usuário'] || row['Nome'] || '').trim();
-            const duracaoStr = String(row['Duração'] || '').trim();
-            const dataStr = String(row['Data'] || '').trim();
-
-            // Pular linhas vazias
-            if (!nomeProjeto || !nomeUsuario || !duracaoStr || !dataStr) {
-                continue;
-            }
-
-            // Converter data para formato ISO
-            const dataISO = parseDate(dataStr);
-            if (!dataISO) {
-                const errorMsg = `⚠️ Formato de data não reconhecido: "${dataStr}"`;
-                if (!result.errors.includes(errorMsg)) {
-                    result.errors.push(errorMsg);
-                }
-                continue;
-            }
-
-            // ✅ CORREÇÃO: Converter duração para horas
-            const horas = parseDuration(duracaoStr);
-            
-            console.log(`📊 ${nomeUsuario} | ${nomeProjeto} | ${dataStr} | "${duracaoStr}" → ${horas}h`);
-            
-            if (horas === 0) {
-                console.warn(`⚠️ Duração zero: "${duracaoStr}"`);
-                continue;
-            }
-
-            const key = `${nomeUsuario}|${nomeProjeto}`;
-            
-            if (!registrosPorAlocacao.has(key)) {
-                registrosPorAlocacao.set(key, {
-                    nomeUsuario,
-                    nomeProjeto,
-                    registrosPorData: new Map(),
-                    totalHoras: 0
-                });
-            }
-
-            const alocacao = registrosPorAlocacao.get(key);
-            const horasExistentes = alocacao.registrosPorData.get(dataISO) || 0;
-            alocacao.registrosPorData.set(dataISO, horasExistentes + horas);
-            alocacao.totalHoras += horas;
-        }
-
-        console.log('✅ Dados agrupados:', registrosPorAlocacao.size, 'alocações únicas');
-
-        // ✅ LOG DE DEBUG: Mostrar projetos e profissionais disponíveis no sistema
-        console.log('📋 Projetos no sistema:', appState.projetos.map(p => p.nome));
-        console.log('📋 Profissionais no sistema:', appState.profissionais.map(p => p.nome));
-
-        // ✅ LOG DE DEBUG: Mostrar totais
-        for (const [key, dados] of registrosPorAlocacao.entries()) {
-            console.log(`👤 ${key}: ${dados.totalHoras.toFixed(2)}h (${dados.registrosPorData.size} dias)`);
-        }
-
-        // Atualizar alocações no Firestore
-        for (const [key, dadosNovos] of registrosPorAlocacao.entries()) {
-            const { nomeUsuario, nomeProjeto, registrosPorData, totalHoras } = dadosNovos;
-
-            console.log(`🔍 Buscando: Profissional="${nomeUsuario}" | Projeto="${nomeProjeto}"`);
-            
-            result.processed++;
-
-            try {
-                // Encontrar profissional - priorizar match exato, depois match mais específico
-                let profissional = appState.profissionais.find(p =>
-                    p.nome.toLowerCase().trim() === nomeUsuario.toLowerCase().trim()
-                );
-
-                // Se não encontrou match exato, buscar match parcial preferindo o mais específico
-                if (!profissional) {
-                    const profissionaisMatch = appState.profissionais.filter(p =>
-                        p.nome.toLowerCase().includes(nomeUsuario.toLowerCase()) ||
-                        nomeUsuario.toLowerCase().includes(p.nome.toLowerCase())
-                    );
-
-                    if (profissionaisMatch.length > 1) {
-                        profissional = profissionaisMatch.sort((a, b) => b.nome.length - a.nome.length)[0];
-                        console.log(`⚠️ Múltiplos profissionais encontrados para "${nomeUsuario}", usando o mais específico: "${profissional.nome}"`);
-                    } else if (profissionaisMatch.length === 1) {
-                        profissional = profissionaisMatch[0];
-                    }
-                }
-
-                if (!profissional) {
-                    result.skipped++;
-                    result.errors.push(`Profissional não encontrado: ${nomeUsuario}`);
-                    console.warn(`❌ Profissional não encontrado: ${nomeUsuario}`);
-                    continue;
-                }
-
-                // Encontrar projeto - priorizar match exato, depois match mais específico
-                let projeto = appState.projetos.find(p =>
-                    p.nome.toLowerCase().trim() === nomeProjeto.toLowerCase().trim()
-                );
-
-                // Se não encontrou match exato, buscar match parcial preferindo o mais específico
-                if (!projeto) {
-                    const projetosMatch = appState.projetos.filter(p =>
-                        p.nome.toLowerCase().includes(nomeProjeto.toLowerCase()) ||
-                        nomeProjeto.toLowerCase().includes(p.nome.toLowerCase())
-                    );
-
-                    // Se houver múltiplos matches, escolher o mais específico (nome mais longo que ainda faz match)
-                    if (projetosMatch.length > 1) {
-                        projeto = projetosMatch.sort((a, b) => b.nome.length - a.nome.length)[0];
-                        console.log(`⚠️ Múltiplos projetos encontrados para "${nomeProjeto}", usando o mais específico: "${projeto.nome}"`);
-                    } else if (projetosMatch.length === 1) {
-                        projeto = projetosMatch[0];
-                    }
-                }
-
-                if (!projeto) {
-                    result.skipped++;
-                    result.errors.push(`Projeto não encontrado: ${nomeProjeto}`);
-                    console.warn(`❌ Projeto não encontrado: ${nomeProjeto}`);
-                    continue;
-                }
-
-                // Encontrar alocação
-                const alocacao = appState.alocacoes.find(a => 
-                    a.profissionalId === profissional.id && 
-                    a.projetoId === projeto.id
-                );
-
-                if (!alocacao) {
-                    result.skipped++;
-                    result.errors.push(`Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
-                    console.warn(`❌ Alocação não encontrada: ${nomeUsuario} → ${nomeProjeto}`);
-                    continue;
-                }
-
-                // ✅ CORREÇÃO: Usar totalHoras calculado
-                const registrosAntigos = alocacao.registrosPorData || {};
-                const registrosNovos = Object.fromEntries(registrosPorData);
-                
-                const novoTotal = Math.round(totalHoras); // Usar totalHoras, não recalcular
-
-                console.log(`💾 Salvando: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
-
-                // Atualizar no Firestore
-                await setDoc(doc(db, getCollectionPath('alocacoes'), alocacao.id), {
-                    ...alocacao,
-                    horasRealizadas: novoTotal,
-                    registrosPorData: registrosNovos,
-                    ultimaImportacao: new Date().toISOString()
-                });
-
-                result.updated++;
-                result.details.push({
-                    profissional: profissional.nome,
-                    projeto: projeto.nome,
-                    horasAntes: alocacao.horasRealizadas || 0,
-                    horasDepois: novoTotal,
-                    diferenca: novoTotal - (alocacao.horasRealizadas || 0)
-                });
-
-                console.log(`✅ Atualizado: ${profissional.nome} → ${projeto.nome}: ${alocacao.horasRealizadas || 0}h → ${novoTotal}h`);
-
-            } catch (error) {
-                result.errors.push(`Erro ao atualizar ${nomeUsuario} → ${nomeProjeto}: ${error.message}`);
-                console.error('❌ Erro:', error);
-            }
-        }
-
-        return result;
-    }
-
-    // ===== NOVA FUNÇÃO: Comparar registros por data (CORRIGIDA) =====
-    function compararRegistrosPorData(antigos, novos) {
-        const comparacao = {
-            diasNovos: [],
-            diasAlterados: [],
-            diasRemovidos: [],
-            diasInalterados: 0
-        };
-
-        const todasAsDatas = new Set([
-            ...Object.keys(antigos),
-            ...Object.keys(novos)
-        ]);
-
-        for (const data of todasAsDatas) {
-            // ✅ CORREÇÃO AQUI: Arredonda para 2 casas decimais
-            const horasAntigas = Math.round((antigos[data] || 0) * 100) / 100;
-            const horasNovas = Math.round((novos[data] || 0) * 100) / 100;
-
-            if (horasAntigas === 0 && horasNovas > 0) {
-                comparacao.diasNovos.push({ data, horas: horasNovas });
-            } else if (horasAntigas > 0 && horasNovas === 0) {
-                comparacao.diasRemovidos.push({ data, horas: horasAntigas });
-            } else if (horasAntigas !== horasNovas) {
-                comparacao.diasAlterados.push({ 
-                    data, 
-                    horasAntes: horasAntigas, 
-                    horasDepois: horasNovas,
-                    diferenca: horasNovas - horasAntigas
-                });
-            } else {
-                comparacao.diasInalterados++;
-            }
-        }
-
-        return comparacao;
-    }
-
-    // ===== NOVA FUNÇÃO: Parse de data (CORRIGIDA) =====
-    // ===== NOVA FUNÇÃO: Parse de data (v3.0 - Mais Robusta) =====
-    function parseDate(dateStr) {
-        dateStr = String(dateStr).trim();
-
-        // 1. Tentar converter número serial do Excel (ex: 45733)
-        if (/^\d{4,5}$/.test(dateStr)) {
-            try {
-                const excelSerialDate = parseInt(dateStr, 10);
-                // 25569 é o offset entre 01/01/1900 (Excel) e 01/01/1970 (Unix)
-                const jsTimestamp = (excelSerialDate - 25569) * 86400 * 1000;
-                const date = new Date(jsTimestamp);
-                const utcDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
-                if (!isNaN(utcDate.getTime())) {
-                    return utcDate.toISOString().split('T')[0];
-                }
-            } catch (e) { /* falha, tenta outros formatos */ }
-        }
-
-        // 2. Tentar formatos comuns (ISO, BR, US, Alemão) com hífens, barras ou pontos
-        // Regex para YYYY-MM-DD
-        let match = dateStr.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/);
-        if (match) {
-            return `${match[1]}-${match[2]}-${match[3]}`;
-        }
-        
-        // Regex para DD/MM/YYYY (BR) ou DD.MM.YYYY (Alemão)
-        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
-        if (match) {
-            // Assumindo formato DD/MM/YYYY
-            return `${match[3]}-${match[2]}-${match[1]}`;
-        }
-
-        // Regex para MM/DD/YYYY (US)
-        match = dateStr.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
-        if (match) {
-            // Se o primeiro grupo (MM) for > 12, é provável que seja DD/MM/YYYY
-            if (parseInt(match[1], 10) > 12) {
-                return `${match[3]}-${match[2]}-${match[1]}`; // Formato BR
-            }
-            // Assumindo formato MM/DD/YYYY
-            return `${match[3]}-${match[1]}-${match[2]}`;
-        }
-        
-        // 3. Último recurso: Deixar o JavaScript tentar adivinhar
-        try {
-            const date = new Date(dateStr);
-            if (!isNaN(date.getTime())) {
-                return date.toISOString().split('T')[0];
-            }
-        } catch (e) {
-            // Ignorar
-        }
-        
-        // Se tudo falhar, retorna null para ser tratado como erro
-        console.warn('Formato de data não reconhecido:', dateStr);
-        return null;
-    }
-
-    function parseDuration(durationStr) {
-        durationStr = String(durationStr).trim();
-        
-        // ✅ NOVO: Verificar formato "X days HH:MM:SS"
-        if (durationStr.includes('days') || durationStr.includes('day')) {
-            const partes = durationStr.split(/days?/i); // case-insensitive
-            const dias = parseInt(partes[0].trim()) || 0;
-            const tempoStr = partes[1].trim();
-            
-            // Processar a parte de tempo HH:MM:SS
-            const timeParts = tempoStr.split(':').map(p => parseInt(p) || 0);
-            const hours = (timeParts[0] || 0);
-            const minutes = (timeParts[1] || 0);
-            const seconds = (timeParts[2] || 0);
-            
-            // ✅ CORREÇÃO CRÍTICA: Converter dias em horas + tempo
-            const totalHoras = (dias * 24) + hours + (minutes / 60) + (seconds / 3600);
-            
-            console.log(`🔍 Convertendo: "${durationStr}" → ${totalHoras.toFixed(2)}h`);
-            
-            return Math.round(totalHoras * 100) / 100; // 2 casas decimais
-        }
-        
-        // Formato HH:MM ou HH:MM:SS
-        if (durationStr.includes(':')) {
-            const parts = durationStr.split(':').map(p => parseInt(p) || 0);
-            const hours = parts[0] || 0;
-            const minutes = parts[1] || 0;
-            const seconds = parts[2] || 0;
-            return hours + (minutes / 60) + (seconds / 3600);
-        }
-        
-        // Formato decimal (1.5, 2.0, etc)
-        const num = parseFloat(durationStr.replace(',', '.'));
-        if (!isNaN(num)) {
-            if (num < 24) return num;
-            return num / 60;
-        }
-        
-        return 0;
-    }
-
-    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 =====
-    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDA) =====
-    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (Com Expandir/Recolher) =====
-    // ===== NOVA FUNÇÃO: Exibição de Resultados v2.0 (CORRIGIDO: Mostra decimais) =====
-    function displayImportResults(result) {
-        const importResults = document.getElementById('import-results');
-        const importSummary = document.getElementById('import-summary');
-        
-        if (!importResults || !importSummary) return;
-
-        let html = `
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div class="bg-blue-50 p-4 rounded-lg">
-                    <p class="text-sm text-blue-600 font-medium">Processadas</p>
-                    <p class="text-2xl font-bold text-blue-900">${result.processed}</p>
-                </div>
-                <div class="bg-green-50 p-4 rounded-lg">
-                    <p class="text-sm text-green-600 font-medium">Atualizadas</p>
-                    <p class="text-2xl font-bold text-green-900">${result.updated}</p>
-                </div>
-                <div class="bg-yellow-50 p-4 rounded-lg">
-                    <p class="text-sm text-yellow-600 font-medium">Ignoradas</p>
-                    <p class="text-2xl font-bold text-yellow-900">${result.skipped}</p>
-                </div>
-            </div>
-        `;
-
-        if (result.details.length > 0) {
-            html += `
-                <div class="mb-6">
-                    <h4 class="font-semibold text-gray-800 mb-3">📋 Detalhes das Atualizações:</h4>
-                    <div class="space-y-3">
-                        ${result.details.map(d => {
-                            const diferencaHoras = d.diferenca || 0;
-                            const sinal = diferencaHoras > 0 ? '+' : '';
-                            const corDiferenca = diferencaHoras > 0 ? 'text-green-600' : 
-                                                 diferencaHoras < 0 ? 'text-red-600' : 'text-gray-600';
-                            
-                            return `
-                                <div class="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                                    <p class="font-semibold text-gray-900 mb-2">${d.profissional} → ${d.projeto}</p>
-                                    <div class="flex gap-4 text-sm">
-                                        <span class="text-gray-600">Antes: <strong>${d.horasAntes}h</strong></span>
-                                        <span class="${corDiferenca} font-bold">
-                                            ${sinal}${diferencaHoras}h
-                                        </span>
-                                        <span class="text-indigo-600">Depois: <strong>${d.horasDepois}h</strong></span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        if (result.errors.length > 0) {
-            const maxVisivel = 10;
-            const temMais = result.errors.length > maxVisivel;
-
-            html += `
-                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg mt-6">
-                    <h4 class="font-semibold text-yellow-800 mb-2">⚠️ Avisos (${result.errors.length}):</h4>
-                    <ul id="import-errors-list" class="list-disc list-inside text-sm text-yellow-700 space-y-1 ${temMais ? 'max-h-64 overflow-y-auto' : ''}">
-                        ${result.errors.slice(0, maxVisivel).map(err => `<li>${err}</li>`).join('')}
-                    </ul>
-                    ${temMais ? `
-                        <div id="import-errors-hidden" class="hidden">
-                            <ul class="list-disc list-inside text-sm text-yellow-700 space-y-1 max-h-96 overflow-y-auto">
-                                ${result.errors.map(err => `<li>${err}</li>`).join('')}
-                            </ul>
-                        </div>
-                        <button id="toggle-errors-btn" onclick="
-                            const lista = document.getElementById('import-errors-list');
-                            const hidden = document.getElementById('import-errors-hidden');
-                            const btn = document.getElementById('toggle-errors-btn');
-                            if (hidden.classList.contains('hidden')) {
-                                lista.classList.add('hidden');
-                                hidden.classList.remove('hidden');
-                                btn.textContent = '▲ Mostrar menos';
-                            } else {
-                                lista.classList.remove('hidden');
-                                hidden.classList.add('hidden');
-                                btn.textContent = '▼ Ver todos os ${result.errors.length} avisos';
-                            }
-                        " class="mt-3 text-sm text-yellow-800 hover:text-yellow-900 font-semibold underline cursor-pointer">
-                            ▼ Ver todos os ${result.errors.length} avisos
-                        </button>
-                    ` : ''}
-                </div>
-            `;
-        }
-
-        importSummary.innerHTML = html;
-        importResults.classList.remove('hidden');
-        
-        // Scroll suave até os resultados
-        setTimeout(() => {
-            importResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-    }
-    // ===== ⭐ FIM: IMPORTAÇÃO DE HORAS DO KIMAI v2.0 =====
-
-
     // Inicialização da view inicial
+    // Configurar listeners de navegação
+    setupNavigationListeners();
+
+    // Chamar drawTimelineChart ao navegar para a Timeline
+    document.querySelectorAll('.nav-link[data-view="timeline"]').forEach(link => {
+        link.addEventListener('click', () => {
+            if (isGoogleChartsLoaded) {
+                setTimeout(() => drawTimelineChart(), 150);
+            }
+        });
+    });
+
     switchView('dashboard');
 }	
 
 // ===== INICIALIZAÇÃO =====
-initializeFirebase();
+initializeFirebaseApp();
 
 // ===== FIM DA PARTE 3 =====
-// ✅ ARQUIVO app.js COMPLETO v3.1.0
+// ✅ ARQUIVO app.js COMPLETO v4.0.0

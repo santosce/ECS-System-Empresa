@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<!-- Versão 3.2.2 -->
-<!-- Inclusão campo Empresa-->
+<!-- Versão 4.0.0 -->
+<!--Remodelado-->
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -345,7 +345,7 @@
                                 <select id="prazos-filter-status-projeto" class="w-full px-3 py-2 border border-gray-300 rounded-md">
                                     <option value="">Todos Status Projeto</option>
                                     <option value="Não Iniciado">Não Iniciado</option>
-                                    <option value="Em Andamento" selected>Em Andamento</option>
+                                    <option value="Em Andamento">Em Andamento</option>
                                     <option value="Concluído">Concluído</option>
                                     <option value="Atrasado">Atrasado</option>
                                     <option value="Em Pausa">Em Pausa</option>
@@ -587,6 +587,7 @@
                     <div>
                         <label for="faturado" class="block text-sm font-medium text-gray-700">Faturado</label>
                         <select id="faturado" name="faturado" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value=""></option>
                             <option>Sim</option>
                             <option>Não</option>
                         </select>
@@ -599,6 +600,7 @@
                 <div>
                     <label for="ativo" class="block text-sm font-medium text-gray-700">Ativo</label>
                     <select id="ativo" name="ativo" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value=""></option>
                         <option>Sim</option>
                         <option>Não</option>
                     </select>
@@ -729,7 +731,19 @@
             </form>
         </div>
     </div>
-	
+	<!-- Módulos de configuração -->
+    <script src="js/config/firebase-config.js" type="module"></script>
+    <script src="js/state/app-state.js" type="module"></script>
+    <script src="js/core/utils.js" type="module"></script>
+    <script src="js/core/auth.js" type="module"></script>
+    <script src="js/core/navigation.js" type="module"></script>
+    <script src="js/modules/dashboard.js" type="module"></script>
+    <script src="js/modules/professionals.js" type="module"></script>
+    <script src="js/modules/projects.js" type="module"></script>
+    <script src="js/modules/allocations.js" type="module"></script>
+    <script src="js/modules/users.js" type="module"></script>
+    <script src="js/modules/timeline.js" type="module"></script>
+    <script src="js/modules/kimai.js" type="module"></script>
     <script src="app.js" type="module"></script>
 </body>
 </html>

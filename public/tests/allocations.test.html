@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Testes — allocations.js</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #0f172a; color: #e2e8f0; padding: 24px; }
+    h1 { color: #7c3aed; margin-bottom: 24px; font-size: 1.4rem; }
+    h2 { color: #94a3b8; margin: 20px 0 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+    .suite { background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .test { padding: 6px 10px; border-radius: 4px; margin: 4px 0; font-size: 0.9rem; display: flex; align-items: flex-start; gap: 10px; }
+    .pass { background: #14532d22; border-left: 3px solid #22c55e; }
+    .fail { background: #7f1d1d22; border-left: 3px solid #ef4444; }
+    .icon { font-size: 1rem; flex-shrink: 0; }
+    .msg  { flex: 1; }
+    .detail { font-size: 0.8rem; color: #f87171; margin-top: 2px; }
+    #summary { position: sticky; top: 0; background: #0f172a; padding: 12px 0 16px; display: flex; gap: 24px; font-size: 0.9rem; }
+    .s-pass { color: #22c55e; } .s-fail { color: #ef4444; }
+    #loading { color: #64748b; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Testes — modules/allocations.js</h1>
+  <div id="summary"></div>
+  <div id="loading">⏳ Carregando testes...</div>
+  <div id="results"></div>
+
+  <!--
+    Import map: caminhos ABSOLUTOS (como o browser resolve a partir de /js/modules/).
+    "../config/firebase-config.js" visto de /js/modules/ → /js/config/firebase-config.js
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "/js/config/firebase-config.js":   "/tests/mocks/firebase-config.mock.js",
+      "/js/state/app-state.js":          "/tests/mocks/app-state.mock.js",
+      "/js/core/utils.js":               "/tests/mocks/utils.mock.js",
+      "/js/core/navigation.js":          "/tests/mocks/navigation.mock.js",
+      "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js": "/tests/mocks/firestore.mock.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ── Mini framework ──────────────────────────────────────────────────────
+    const results = [];
+    let currentSuite = 'Geral';
+
+    function suite(name) { currentSuite = name; }
+
+    async function test(name, fn) {
+      try {
+        await fn();
+        results.push({ suite: currentSuite, name, ok: true });
+      } catch (e) {
+        results.push({ suite: currentSuite, name, ok: false, error: e.message });
+      }
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function assert(condition, msg = 'Assertion falhou') {
+      if (!condition) throw new Error(msg);
+    }
+
+    function assertEqual(a, b, msg) {
+      if (a !== b) throw new Error(msg || `Esperado ${JSON.stringify(b)}, recebido ${JSON.stringify(a)}`);
+    }
+
+    function assertContains(str, sub, msg) {
+      if (!String(str).includes(sub)) throw new Error(msg || `"${sub}" não encontrado em resultado`);
+    }
+
+    // ── Importar módulo real (com dependências mockadas pelo import map) ────
+    import * as Alloc from '/js/modules/allocations.js';
+    import * as State from '/tests/mocks/app-state.mock.js';
+
+    // ── Helpers DOM ─────────────────────────────────────────────────────────
+    function makeDOM(html) {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      document.body.appendChild(div);
+      return div;
+    }
+
+    function cleanup(el) { el?.remove(); }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SUITE 1 — renderAlocacoes
+    // ════════════════════════════════════════════════════════════════════════
+    suite('renderAlocacoes');
+
+    await test('renderiza linha para cada alocação', () => {
+      State.setMockData({
+        profissionais: [{ id: 'p1', nome: 'Ana Silva', ativo: 'Sim' }],
+        projetos:      [{ id: 'pr1', nome: 'Projeto Alpha' }],
+        alocacoes: [{
+          id: 'a1', profissionalId: 'p1', projetoId: 'pr1',
+          dataInicio: '2025-01-01', dataFim: '2025-03-31',
+          percentual: 80, horasEstimadas: 400, horasRealizadas: 200, faturado: 'Sim'
+        }]
+      });
+      const el = makeDOM(`
+        <table><tbody id="alocacoes-table-body"></tbody></table>
+        <select id="alocacoes-filter-profissional"><option value="">Todos</option></select>
+        <select id="alocacoes-filter-projeto"><option value="">Todos</option></select>
+      `);
+      Alloc.renderAlocacoes();
+      const tbody = document.getElementById('alocacoes-table-body');
+      assert(tbody.querySelectorAll('tr').length === 1, 'Deve haver 1 linha');
+      assertContains(tbody.innerHTML, 'Ana Silva', 'Nome do profissional presente');
+      assertContains(tbody.innerHTML, 'Projeto Alpha', 'Nome do projeto presente');
+      assertContains(tbody.innerHTML, '80%', 'Percentual presente');
+      cleanup(el);
+    });
+
+    await test('exibe mensagem quando não há alocações', () => {
+      State.setMockData({ profissionais: [], projetos: [], alocacoes: [] });
+      const el = makeDOM(`
+        <table><tbody id="alocacoes-table-body"></tbody></table>
+        <select id="alocacoes-filter-profissional"><option value="">Todos</option></select>
+        <select id="alocacoes-filter-projeto"><option value="">Todos</option></select>
+      `);
+      Alloc.renderAlocacoes();
+      assertContains(document.getElementById('alocacoes-table-body').innerHTML, 'Nenhuma alocação');
+      cleanup(el);
+    });
+
+    await test('filtra por profissional corretamente', () => {
+      State.setMockData({
+        profissionais: [
+          { id: 'p1', nome: 'Ana Silva',   ativo: 'Sim' },
+          { id: 'p2', nome: 'Bruno Costa', ativo: 'Sim' }
+        ],
+        projetos: [{ id: 'pr1', nome: 'Alpha' }],
+        alocacoes: [
+          { id: 'a1', profissionalId: 'p1', projetoId: 'pr1', dataInicio: '2025-01-01',
+            dataFim: '2025-06-30', percentual: 50, horasEstimadas: 0, horasRealizadas: 0, faturado: 'Sim' },
+          { id: 'a2', profissionalId: 'p2', projetoId: 'pr1', dataInicio: '2025-01-01',
+            dataFim: '2025-06-30', percentual: 30, horasEstimadas: 0, horasRealizadas: 0, faturado: 'Não' }
+        ]
+      });
+      const el = makeDOM(`
+        <table><tbody id="alocacoes-table-body"></tbody></table>
+        <select id="alocacoes-filter-profissional">
+          <option value="">Todos</option>
+          <option value="p1" selected>Ana</option>
+        </select>
+        <select id="alocacoes-filter-projeto"><option value="">Todos</option></select>
+      `);
+      Alloc.renderAlocacoes();
+      const tbody = document.getElementById('alocacoes-table-body');
+      assertEqual(tbody.querySelectorAll('tr').length, 1, 'Apenas 1 linha após filtro');
+      assertContains(tbody.innerHTML, 'Ana Silva');
+      assert(!tbody.innerHTML.includes('Bruno Costa'), 'Bruno não deve aparecer');
+      cleanup(el);
+    });
+
+    await test('ordena por nome do profissional (alfabético)', () => {
+      State.setMockData({
+        profissionais: [
+          { id: 'p1', nome: 'Zara',  ativo: 'Sim' },
+          { id: 'p2', nome: 'Alice', ativo: 'Sim' }
+        ],
+        projetos: [{ id: 'pr1', nome: 'Alpha' }],
+        alocacoes: [
+          { id: 'a1', profissionalId: 'p1', projetoId: 'pr1', dataInicio: '2025-01-01',
+            dataFim: '2025-06-30', percentual: 50, horasEstimadas: 0, horasRealizadas: 0, faturado: 'Sim' },
+          { id: 'a2', profissionalId: 'p2', projetoId: 'pr1', dataInicio: '2025-01-01',
+            dataFim: '2025-06-30', percentual: 30, horasEstimadas: 0, horasRealizadas: 0, faturado: 'Sim' }
+        ]
+      });
+      const el = makeDOM(`
+        <table><tbody id="alocacoes-table-body"></tbody></table>
+        <select id="alocacoes-filter-profissional"><option value="">Todos</option></select>
+        <select id="alocacoes-filter-projeto"><option value="">Todos</option></select>
+      `);
+      Alloc.renderAlocacoes();
+      const primeira = document.getElementById('alocacoes-table-body')
+                         .querySelector('tr td')?.textContent?.trim();
+      assertEqual(primeira, 'Alice', 'Alice deve vir antes de Zara');
+      cleanup(el);
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SUITE 2 — populateAlocacoesFilters
+    // ════════════════════════════════════════════════════════════════════════
+    suite('populateAlocacoesFilters');
+
+    await test('popula selects com profissionais ativos e projetos', () => {
+      State.setMockData({
+        profissionais: [
+          { id: 'p1', nome: 'Ana',   ativo: 'Sim' },
+          { id: 'p2', nome: 'Bruno', ativo: 'Não' },   // inativo — não deve aparecer
+          { id: 'p3', nome: 'Carlos',ativo: 'Sim' }
+        ],
+        projetos: [{ id: 'pr1', nome: 'Alpha' }, { id: 'pr2', nome: 'Beta' }],
+        alocacoes: []
+      });
+      const el = makeDOM(`
+        <select id="alocacoes-filter-profissional"></select>
+        <select id="alocacoes-filter-projeto"></select>
+      `);
+      Alloc.populateAlocacoesFilters();
+      const profOpts = document.getElementById('alocacoes-filter-profissional').options;
+      const projOpts = document.getElementById('alocacoes-filter-projeto').options;
+      assertEqual(profOpts.length, 3, '2 ativos + opção "Todos"');
+      assertEqual(projOpts.length, 3, '2 projetos + opção "Todos"');
+      assert(!Array.from(profOpts).some(o => o.text === 'Bruno'), 'Bruno (inativo) não deve aparecer');
+      cleanup(el);
+    });
+
+    await test('ordena profissionais alfabeticamente', () => {
+      State.setMockData({
+        profissionais: [
+          { id: 'p1', nome: 'Zara',  ativo: 'Sim' },
+          { id: 'p2', nome: 'Alice', ativo: 'Sim' }
+        ],
+        projetos: [], alocacoes: []
+      });
+      const el = makeDOM(`
+        <select id="alocacoes-filter-profissional"></select>
+        <select id="alocacoes-filter-projeto"></select>
+      `);
+      Alloc.populateAlocacoesFilters();
+      const opts = document.getElementById('alocacoes-filter-profissional').options;
+      assertEqual(opts[1].text, 'Alice', 'Alice deve ser a 1ª (índice 1)');
+      assertEqual(opts[2].text, 'Zara',  'Zara deve ser a 2ª (índice 2)');
+      cleanup(el);
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SUITE 3 — openAlocacaoModal / closeAlocacaoModal
+    // ════════════════════════════════════════════════════════════════════════
+    suite('openAlocacaoModal / closeAlocacaoModal');
+
+    await test('openAlocacaoModal remove classe hidden do modal', () => {
+      State.setMockData({ profissionais: [], projetos: [], alocacoes: [] });
+      const el = makeDOM(`
+        <div id="alocacao-modal" class="hidden">
+          <h2></h2>
+          <input type="hidden" id="alocacao-id">
+          <form id="alocacao-form"></form>
+          <select id="alocacao-profissional"></select>
+          <select id="alocacao-projeto"></select>
+        </div>
+      `);
+      Alloc.openAlocacaoModal();
+      assert(!document.getElementById('alocacao-modal').classList.contains('hidden'), 'Modal deve estar visível');
+      cleanup(el);
+    });
+
+    await test('closeAlocacaoModal adiciona classe hidden ao modal', () => {
+      const el = makeDOM(`<div id="alocacao-modal"></div>`);
+      Alloc.closeAlocacaoModal();
+      assert(document.getElementById('alocacao-modal').classList.contains('hidden'), 'Modal deve estar oculto');
+      cleanup(el);
+    });
+
+    await test('openAlocacaoModal(data) preenche campos no modo edição', async () => {
+      State.setMockData({
+        profissionais: [{ id: 'p1', nome: 'Ana', ativo: 'Sim' }],
+        projetos:      [{ id: 'pr1', nome: 'Alpha' }],
+        alocacoes:     []
+      });
+      const el = makeDOM(`
+        <div id="alocacao-modal" class="hidden">
+          <h2></h2>
+          <input type="hidden" id="alocacao-id">
+          <form id="alocacao-form"></form>
+          <select id="alocacao-profissional"><option value="p1">Ana</option></select>
+          <select id="alocacao-projeto"><option value="pr1">Alpha</option></select>
+          <select id="alocacao-faturado"><option value="Sim">Sim</option></select>
+          <input id="alocacao-percentual">
+          <input id="horas-estimadas-profissional">
+          <input id="horas-realizadas-profissional">
+          <input id="alocacao-inicio">
+          <input id="alocacao-fim">
+        </div>
+      `);
+      Alloc.openAlocacaoModal({
+        id: 'a1', profissionalId: 'p1', projetoId: 'pr1',
+        faturado: 'Sim', percentual: 60,
+        horasEstimadas: 300, horasRealizadas: 150,
+        dataInicio: '2025-02-01', dataFim: '2025-04-30'
+      });
+      await sleep(200);  // aguarda o setTimeout interno do módulo
+      assertEqual(document.getElementById('alocacao-id').value, 'a1', 'ID correto');
+      assertEqual(document.getElementById('alocacao-percentual').value, '60', 'Percentual correto');
+      assertEqual(document.getElementById('alocacao-inicio').value, '2025-02-01', 'Data início correta');
+      assertEqual(document.getElementById('alocacao-fim').value, '2025-04-30', 'Data fim correta');
+      cleanup(el);
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SUITE 4 — deleteAlocacao
+    // ════════════════════════════════════════════════════════════════════════
+    suite('deleteAlocacao');
+
+    await test('não executa sem confirmação', async () => {
+      const original = window.confirm;
+      window.confirm = () => false;
+      window.__testDeleteDocCalled = false;
+      await Alloc.deleteAlocacao('a1');
+      assert(!window.__testDeleteDocCalled, 'deleteDoc não deve ser chamado');
+      window.confirm = original;
+    });
+
+    await test('chama deleteDoc com confirmação', async () => {
+      const original = window.confirm;
+      window.confirm = () => true;
+      window.__testDeleteDocCalled = false;
+      await Alloc.deleteAlocacao('a1');
+      assert(window.__testDeleteDocCalled, 'deleteDoc deve ser chamado');
+      window.confirm = original;
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SUITE 5 — Lógica de conflito (função privada replicada inline)
+    // ════════════════════════════════════════════════════════════════════════
+    suite('Lógica de Conflito');
+
+    function checkDisponibilidade(profId, inicio, fim, pctNovo, idAtual, alocacoes, projetos) {
+      if (!profId || !inicio || !fim) return { disponivel: true, conflitos: [] };
+      const di = new Date(inicio + 'T00:00:00');
+      const df = new Date(fim    + 'T00:00:00');
+      const conflitantes = alocacoes.filter(a => {
+        if (idAtual && a.id === idAtual) return false;
+        if (a.profissionalId !== profId) return false;
+        const ai = new Date(a.dataInicio + 'T00:00:00');
+        const af = new Date(a.dataFim   + 'T00:00:00');
+        return ai <= df && af >= di;
+      });
+      if (!conflitantes.length) return { disponivel: true, conflitos: [], percentualTotal: pctNovo };
+      const jaAlocado = conflitantes.reduce((s, a) => s + (parseInt(a.percentual) || 0), 0);
+      const total     = jaAlocado + (parseInt(pctNovo) || 0);
+      return {
+        disponivel: total <= 100,
+        conflitos: conflitantes.map(a => ({ projeto: projetos.find(p => p.id === a.projetoId)?.nome || 'N/A', percentual: a.percentual })),
+        percentualJaAlocado: jaAlocado,
+        percentualTotal: total
+      };
+    }
+
+    const proj = [{ id: 'pr1', nome: 'Alpha' }, { id: 'pr2', nome: 'Beta' }];
+
+    await test('disponível quando não há sobreposição de datas', () => {
+      const aloc = [{ id:'a1', profissionalId:'p1', projetoId:'pr1', dataInicio:'2025-01-01', dataFim:'2025-03-31', percentual:80 }];
+      const r = checkDisponibilidade('p1', '2025-04-01', '2025-06-30', 80, null, aloc, proj);
+      assert(r.disponivel, 'Deve estar disponível');
+      assertEqual(r.conflitos.length, 0, 'Sem conflitos');
+    });
+
+    await test('disponível quando percentual total ≤ 100%', () => {
+      const aloc = [{ id:'a1', profissionalId:'p1', projetoId:'pr1', dataInicio:'2025-01-01', dataFim:'2025-06-30', percentual:40 }];
+      const r = checkDisponibilidade('p1', '2025-03-01', '2025-05-31', 50, null, aloc, proj);
+      assert(r.disponivel, '40+50=90 → disponível');
+      assertEqual(r.percentualTotal, 90, 'Total = 90%');
+    });
+
+    await test('indisponível quando percentual total > 100%', () => {
+      const aloc = [{ id:'a1', profissionalId:'p1', projetoId:'pr1', dataInicio:'2025-01-01', dataFim:'2025-06-30', percentual:80 }];
+      const r = checkDisponibilidade('p1', '2025-03-01', '2025-05-31', 30, null, aloc, proj);
+      assert(!r.disponivel, '80+30=110 → indisponível');
+      assertEqual(r.percentualTotal, 110, 'Total = 110%');
+      assertEqual(r.conflitos.length, 1, '1 conflito detectado');
+    });
+
+    await test('ignora a própria alocação ao editar', () => {
+      const aloc = [{ id:'a1', profissionalId:'p1', projetoId:'pr1', dataInicio:'2025-01-01', dataFim:'2025-06-30', percentual:80 }];
+      const r = checkDisponibilidade('p1', '2025-01-01', '2025-06-30', 80, 'a1', aloc, proj);
+      assert(r.disponivel, 'Não deve conflitar consigo mesma ao editar');
+      assertEqual(r.conflitos.length, 0);
+    });
+
+    await test('conflito quando datas se tocam no mesmo dia', () => {
+      const aloc = [{ id:'a1', profissionalId:'p1', projetoId:'pr1', dataInicio:'2025-03-31', dataFim:'2025-06-30', percentual:60 }];
+      const r = checkDisponibilidade('p1', '2025-01-01', '2025-03-31', 60, null, aloc, proj);
+      assert(!r.disponivel, 'Datas que se tocam geram conflito (60+60=120)');
+    });
+
+    await test('sem conflito para outro profissional no mesmo período', () => {
+      const aloc = [{ id:'a1', profissionalId:'p2', projetoId:'pr1', dataInicio:'2025-01-01', dataFim:'2025-06-30', percentual:90 }];
+      const r = checkDisponibilidade('p1', '2025-01-01', '2025-06-30', 90, null, aloc, proj);
+      assert(r.disponivel, 'Alocação de outro profissional não conflita');
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Render final
+    // ════════════════════════════════════════════════════════════════════════
+    document.getElementById('loading').remove();
+    renderResults();
+
+    function renderResults() {
+      const container = document.getElementById('results');
+      const summary   = document.getElementById('summary');
+      container.innerHTML = '';
+
+      const pass  = results.filter(r =>  r.ok).length;
+      const fail  = results.filter(r => !r.ok).length;
+
+      summary.innerHTML = `
+        <span class="s-pass">✔ ${pass} passaram</span>
+        <span class="s-fail">✘ ${fail} falharam</span>
+        <span style="color:#64748b">∑ ${results.length} total</span>
+        ${fail === 0 ? '<span style="color:#22c55e;font-weight:bold">🎉 Todos OK!</span>' : ''}
+      `;
+
+      const bySuite = {};
+      results.forEach(r => { (bySuite[r.suite] = bySuite[r.suite] || []).push(r); });
+
+      for (const [suiteName, tests] of Object.entries(bySuite)) {
+        const div = document.createElement('div');
+        div.className = 'suite';
+        div.innerHTML = `<h2>${suiteName}</h2>`;
+        tests.forEach(t => {
+          const row = document.createElement('div');
+          row.className = `test ${t.ok ? 'pass' : 'fail'}`;
+          row.innerHTML = `
+            <span class="icon">${t.ok ? '✔' : '✘'}</span>
+            <div class="msg">
+              ${t.name}
+              ${t.error ? `<div class="detail">⚠ ${t.error}</div>` : ''}
+            </div>
+          `;
+          div.appendChild(row);
+        });
+        container.appendChild(div);
+      }
+    }
+  </script>
+</body>
+</html>
