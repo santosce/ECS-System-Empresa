@@ -228,10 +228,11 @@ export function updateMonthlyAvailabilityChart() {
         monthlyAvailabilityChart = null;
     }
 
-    // Ajustar altura dinamicamente: 30px por barra, mínimo 200px
-    const BAR_HEIGHT = 30;
+    // Ajustar altura dinamicamente: 36px por barra, mínimo 200px
+    const BAR_HEIGHT = 36;
     const dynamicHeight = Math.max(200, dataByProf.length * BAR_HEIGHT);
-    canvas.style.height = dynamicHeight + 'px';
+    const wrapper = document.getElementById('monthly-availability-chart-wrapper');
+    if (wrapper) wrapper.style.height = dynamicHeight + 'px';
 
     const ctx = canvas.getContext('2d');
     monthlyAvailabilityChart = new Chart(ctx, {
