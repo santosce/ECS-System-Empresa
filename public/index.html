@@ -104,7 +104,7 @@
                                     <div class="bg-white p-6 rounded-lg shadow border-l-4 border-gray-400">
                                         <h3 class="text-sm font-medium text-gray-500 mb-2">Total de Projetos</h3>
                                         <p data-metric="dash-total-projetos" class="text-3xl font-bold text-gray-900">0</p>
-                                        <p class="text-xs text-gray-500 mt-1">Cadastrados no sistema</p>
+                                       <!-- class="text-xs text-gray-500 mt-1">Cadastrados no sistema</p>-->
                                     </div>
                                     
                                     <div class="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
@@ -153,7 +153,7 @@
                                     <div class="bg-white p-6 rounded-lg shadow border-l-4 border-gray-400">
                                         <h3 class="text-sm font-medium text-gray-500 mb-2">Total de Profissionais</h3>
                                         <p data-metric="dash-total-profs" class="text-3xl font-bold text-gray-900">0</p>
-                                        <p class="text-xs text-gray-500 mt-1">Cadastrados no sistema</p>
+                                       <!-- class="text-xs text-gray-500 mt-1">Cadastrados no sistema</p>-->
                                     </div>
                                     
                                     <div class="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition">
@@ -397,7 +397,15 @@
 						<!-- ✅ CABEÇALHO CLICÁVEL (NOVO!) -->
 						<div class="flex justify-between items-center cursor-pointer collapsible-header mb-4">
 							<h2 class="text-xl font-semibold text-gray-800">📋 Lista de Alocações</h2>
-							<svg class="w-6 h-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+							<div class="flex items-center gap-3">
+								<button id="export-alocacoes-btn" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 flex items-center gap-2" onclick="event.stopPropagation()">
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+									</svg>
+									Exportar Excel
+								</button>
+								<svg class="w-6 h-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+							</div>
 						</div>
 						
 						<!-- ✅ CONTEÚDO COLAPSÁVEL -->
