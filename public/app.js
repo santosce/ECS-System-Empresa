@@ -96,7 +96,7 @@ import { initializeKimaiModule } from './js/modules/kimai.js';
 
 
 
-// ===== ECS SYSTEM - VERSÃO 4.0.0 MODULAR =====
+// ===== ECS SYSTEM - VERSÃO 4.1.0 MODULAR =====
 // Sistema de Gestão de Capacity
 // Refatoração modular iniciada em: [24/03/26]
 
