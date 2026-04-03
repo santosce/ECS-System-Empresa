@@ -1,6 +1,8 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
 REM Script: Iniciar Nova Feature
+REM Versao: 3.0
 REM ========================================
 
 echo.

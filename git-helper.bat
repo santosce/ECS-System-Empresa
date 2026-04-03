@@ -2,14 +2,14 @@
 chcp 65001 >nul
 REM ========================================
 REM Menu Principal - Git + Firebase Helper
-REM Versao: 2.0 - Reorganizado por Fluxo
+REM Versao: 3.0 - Corrigido VIM + Swap Files
 REM ========================================
 
 :MENU
 cls
 echo.
 echo ========================================
-echo   GIT + FIREBASE HELPER v2.0
+echo   GIT + FIREBASE HELPER v3.0
 echo   ECS-System-Empresa
 echo ========================================
 echo.
@@ -27,10 +27,11 @@ echo.
 echo [7] Emergencia                 (Desfazer/Recuperar)
 echo [8] Ver Guia de Commits        (Como escrever)
 echo [9] Configuracao Inicial       (Setup)
+echo [10] Limpar Swap Files         (Corrigir VIM)
 echo [0] Sair
 echo.
 echo ========================================
-set /p OPCAO="Escolha uma opcao (0-9): "
+set /p OPCAO="Escolha uma opcao (0-10): "
 
 if "%OPCAO%"=="1" goto NOVA_FEATURE
 if "%OPCAO%"=="2" goto COMMIT
@@ -41,6 +42,7 @@ if "%OPCAO%"=="6" goto DEPLOY_PROD
 if "%OPCAO%"=="7" goto EMERGENCIA
 if "%OPCAO%"=="8" goto GUIA_COMMIT
 if "%OPCAO%"=="9" goto SETUP
+if "%OPCAO%"=="10" goto LIMPAR_SWAP
 if "%OPCAO%"=="0" goto SAIR
 
 echo.
@@ -106,6 +108,11 @@ goto MENU
 :SETUP
 cls
 call CmdGit\setup.bat
+goto MENU
+
+:LIMPAR_SWAP
+cls
+call CmdGit\limpar-swap.bat
 goto MENU
 
 :SAIR

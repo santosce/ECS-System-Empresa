@@ -2,6 +2,7 @@
 chcp 65001 >nul
 REM ========================================
 REM Script: Atualizar Branch Atual
+REM Versao: 3.0
 REM ========================================
 
 echo.

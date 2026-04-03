@@ -5,7 +5,7 @@
 import { getAppId } from '../config/firebase-config.js';
 
 // ===== CONSTANTES =====
-export const APP_VERSION = '4.0.0';
+export const APP_VERSION = '4.1.0';
 export const APP_NAME = 'ECS System';
 
 // ===== FUNÇÃO PARA DEBOUNCE =====
@@ -19,7 +19,11 @@ export function debounce(func, delay) {
 
 // ===== FUNÇÃO PARA FORMATAR DATA =====
 export function formatDate(dateString) {
-    if (!dateString || dateString.length < 10) return 'N/A';
+    if (!dateString) return 'N/A';
+    if (dateString instanceof Date) {
+        dateString = dateString.toISOString().split('T')[0];
+    }
+    if (typeof dateString !== 'string' || dateString.length < 10) return 'N/A';
     const [year, month, day] = dateString.split('-');
     return `${day}/${month}/${year}`;
 }

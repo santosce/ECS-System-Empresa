@@ -1,6 +1,8 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
 REM Script: Ver Status do Projeto
+REM Versao: 3.0 - Corrigido erro de sincronizacao
 REM ========================================
 
 echo.
@@ -33,11 +35,22 @@ echo [BRANCHES LOCAIS]
 git branch
 echo.
 
-REM Verificar se há algo para push
+REM Verificar se há algo para push (CORRIGIDO v3.0)
 echo [STATUS DE SINCRONIZACAO]
 git fetch origin 2>nul
-for /f %%i in ('git rev-list --count HEAD..origin/%BRANCH% 2^>nul') do set BEHIND=%%i
-for /f %%i in ('git rev-list --count origin/%BRANCH%..HEAD 2^>nul') do set AHEAD=%%i
+
+REM Contar commits pendentes (metodo corrigido)
+git rev-list --count HEAD..origin/%BRANCH% >temp_behind.txt 2>nul
+set /p BEHIND=<temp_behind.txt
+del temp_behind.txt 2>nul
+
+git rev-list --count origin/%BRANCH%..HEAD >temp_ahead.txt 2>nul
+set /p AHEAD=<temp_ahead.txt  
+del temp_ahead.txt 2>nul
+
+REM Garantir valores numericos
+if "%BEHIND%"=="" set BEHIND=0
+if "%AHEAD%"=="" set AHEAD=0
 
 if "%AHEAD%"=="0" (
     echo Nenhum commit local para enviar
@@ -56,7 +69,7 @@ echo.
 
 REM Projetos Firebase
 echo [PROJETOS FIREBASE]
-call firebase projects:list 2>nul
+firebase projects:list 2>nul
 if errorlevel 1 (
     echo Firebase CLI nao instalado ou nao configurado
 )

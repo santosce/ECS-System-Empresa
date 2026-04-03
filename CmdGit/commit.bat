@@ -1,6 +1,8 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
-REM Script: Commit Rápido
+REM Script: Commit Rapido
+REM Versao: 3.0 - Melhorado
 REM ========================================
 echo.
 echo ========================================
@@ -25,7 +27,7 @@ if "%COMMIT_MSG%"=="" (
 echo.
 echo [1/3] Adicionando arquivos...
 git add -A
-REM Remover referências ao dispositivo 'nul' do Windows
+REM Remover referencias ao dispositivo 'nul' do Windows
 git reset -- nul 2>nul
 git reset -- */nul 2>nul
 if errorlevel 1 (

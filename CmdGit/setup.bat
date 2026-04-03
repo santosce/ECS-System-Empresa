@@ -1,12 +1,14 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
 REM Script de Configuracao para ECS-System-Empresa
+REM Versao: 3.0 - Com configuracao de editor
 REM ========================================
 
 cls
 echo.
 echo ========================================
-echo   CONFIGURACAO INICIAL
+echo   CONFIGURACAO INICIAL v3.0
 echo   ECS-System-Empresa
 echo ========================================
 echo.
@@ -17,7 +19,7 @@ pause
 
 REM Verificar Git
 echo.
-echo [1/5] Verificando Git...
+echo [1/6] Verificando Git...
 git --version >nul 2>&1
 if errorlevel 1 (
     echo [ERRO] Git nao instalado!
@@ -30,7 +32,7 @@ if errorlevel 1 (
 
 REM Verificar Node
 echo.
-echo [2/5] Verificando Node.js...
+echo [2/6] Verificando Node.js...
 node --version >nul 2>&1
 if errorlevel 1 (
     echo [AVISO] Node.js nao instalado!
@@ -43,7 +45,7 @@ if errorlevel 1 (
 
 REM Verificar Firebase CLI
 echo.
-echo [3/5] Verificando Firebase CLI...
+echo [3/6] Verificando Firebase CLI...
 firebase --version >nul 2>&1
 if errorlevel 1 (
     if "%NODE_MISSING%"=="1" (
@@ -64,7 +66,7 @@ if errorlevel 1 (
 
 REM Configurar Git (se necessario)
 echo.
-echo [4/5] Verificando configuracao do Git...
+echo [4/6] Verificando configuracao do Git...
 git config user.name >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -84,9 +86,16 @@ if errorlevel 1 (
     echo Email: %CURRENT_EMAIL%
 )
 
+REM Configurar editor padrao (NOVO v3.0)
+echo.
+echo [5/6] Configurando editor padrao...
+git config --global core.editor "notepad"
+git config --global merge.conflictstyle diff3
+echo [OK] Editor configurado para Notepad (sem VIM!)
+
 REM Verificar repositorio
 echo.
-echo [5/5] Verificando repositorio...
+echo [6/6] Verificando repositorio...
 git rev-parse --git-dir >nul 2>&1
 if errorlevel 1 (
     echo [AVISO] Este diretorio nao e um repositorio Git!

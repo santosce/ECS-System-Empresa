@@ -346,6 +346,48 @@ export function populateAlocacoesFilters() {
 }
 
 // ===== INICIALIZAR MÓDULO =====
+// ===== EXPORTAR ALOCAÇÕES PARA EXCEL =====
+function exportAlocacoesExcel() {
+    const filterProf = document.getElementById('alocacoes-filter-profissional')?.value || '';
+    const filterProj = document.getElementById('alocacoes-filter-projeto')?.value || '';
+
+    let filtered = getAlocacoes();
+    if (filterProf) filtered = filtered.filter(a => a.profissionalId === filterProf);
+    if (filterProj) filtered = filtered.filter(a => a.projetoId === filterProj);
+
+    filtered.sort((a, b) => {
+        const profA = getProfissionais().find(p => p.id === a.profissionalId);
+        const profB = getProfissionais().find(p => p.id === b.profissionalId);
+        return (profA?.nome || '').localeCompare(profB?.nome || '');
+    });
+
+    const data = [
+        ['Profissional', 'Projeto', 'Início', 'Fim', '% Alocado', 'Horas Est.', 'Horas Real.', 'Faturado']
+    ];
+
+    filtered.forEach(aloc => {
+        const prof = getProfissionais().find(p => p.id === aloc.profissionalId);
+        const proj = getProjetos().find(p => p.id === aloc.projetoId);
+        data.push([
+            prof?.nome || 'N/A',
+            proj?.nome || 'N/A',
+            formatDate(aloc.dataInicio),
+            formatDate(aloc.dataFim),
+            `${aloc.percentual}%`,
+            aloc.horasEstimadas || 0,
+            aloc.horasRealizadas || 0,
+            aloc.faturado || '—',
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Alocações');
+
+    const hoje = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `alocacoes_${hoje}.xlsx`);
+}
+
 export function initializeAllocationsModule() {
     console.log('📅 Módulo de Alocações inicializado');
 
@@ -367,6 +409,9 @@ export function initializeAllocationsModule() {
     // Listeners de filtros
     document.getElementById('alocacoes-filter-profissional')?.addEventListener('change', renderAlocacoes);
     document.getElementById('alocacoes-filter-projeto')?.addEventListener('change', renderAlocacoes);
+
+    // Botão exportar Excel
+    document.getElementById('export-alocacoes-btn')?.addEventListener('click', exportAlocacoesExcel);
 
     // Botão "Adicionar Alocação"
     document.getElementById('main-actions')?.addEventListener('click', (e) => {

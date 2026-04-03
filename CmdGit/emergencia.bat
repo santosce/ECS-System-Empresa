@@ -1,6 +1,8 @@
 @echo off
+chcp 65001 >nul
 REM ========================================
 REM Script: Emergencia - Desfazer Alteracoes
+REM Versao: 3.0 - Com limpeza de swap
 REM ========================================
 
 echo.
@@ -15,16 +17,18 @@ echo 2. Desfazer ultimo commit (manter alteracoes)
 echo 3. Desfazer ultimo commit (descartar alteracoes)
 echo 4. Voltar para uma versao antiga (ver historico)
 echo 5. Cancelar merge em andamento
-echo 6. Sair
+echo 6. Limpar swap files do VIM
+echo 7. Sair
 echo.
-set /p OPCAO="Escolha uma opcao (1-6): "
+set /p OPCAO="Escolha uma opcao (1-7): "
 
 if "%OPCAO%"=="1" goto DESCARTAR_ALTERACOES
 if "%OPCAO%"=="2" goto DESFAZER_COMMIT_MANTER
 if "%OPCAO%"=="3" goto DESFAZER_COMMIT_DESCARTAR
 if "%OPCAO%"=="4" goto VER_HISTORICO
 if "%OPCAO%"=="5" goto CANCELAR_MERGE
-if "%OPCAO%"=="6" goto SAIR
+if "%OPCAO%"=="6" goto LIMPAR_SWAP
+if "%OPCAO%"=="7" goto SAIR
 
 echo Opcao invalida!
 pause
@@ -92,6 +96,11 @@ git merge --abort
 echo.
 echo Merge cancelado!
 pause
+goto SAIR
+
+:LIMPAR_SWAP
+echo.
+call limpar-swap.bat
 goto SAIR
 
 :SAIR
