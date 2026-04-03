@@ -140,14 +140,16 @@ function updateProjectGanttChart() {
         const [ay, am, ad] = inicioStr.split('-').map(Number);
         const [zy, zm, zd] = fimStr.split('-').map(Number);
 
-        // Profissionais alocados neste projeto
-        const profsAlocados = alocacoes
-            .filter(a => a.projetoId === projeto.id)
-            .map(a => {
-                const prof = getProfissionais().find(p => p.id === a.profissionalId);
-                return prof ? `${prof.nome} (${a.percentual}%)` : null;
-            })
-            .filter(Boolean);
+        // Profissionais alocados neste projeto (sem repetição e sem percentual)
+        const profsAlocados = [...new Set(
+            alocacoes
+                .filter(a => a.projetoId === projeto.id)
+                .map(a => {
+                    const prof = getProfissionais().find(p => p.id === a.profissionalId);
+                    return prof ? prof.nome : null;
+                })
+                .filter(Boolean)
+        )];
 
         const labelInicio = projeto.inicioReal
             ? `<strong>Início Real:</strong> ${formatDate(projeto.inicioReal)}<br/><strong>Início Previsto:</strong> ${formatDate(projeto.inicioPrevisto)}`
@@ -309,51 +311,92 @@ function renderAvailableProfessionals() {
     if (filterPerfil) profissionais = profissionais.filter(p => p.perfil === filterPerfil);
     const alocacoes = getAlocacoes();
     const projetos = getProjetos();
-    const today = new Date();
-    
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const limite60dias = new Date(hoje);
+    limite60dias.setDate(hoje.getDate() + 60);
+
     const disponiveisData = [];
-    
+
     profissionais.forEach(prof => {
+        // Regra 2: Descartar projetos com status Concluído
         const alocacoesProf = alocacoes
-            .filter(a => a.profissionalId === prof.id)
+            .filter(a => {
+                if (a.profissionalId !== prof.id) return false;
+                const projeto = projetos.find(p => p.id === a.projetoId);
+                if (projeto?.status === 'Concluído') return false;
+                return true;
+            })
             .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
-        
-        // Encontrar última alocação que terminou (passado ou hoje)
-        const alocacoesPassadas = alocacoesProf.filter(a => new Date(a.dataFim) <= today);
-        const ultimaAlocacao = alocacoesPassadas.length > 0 
-            ? alocacoesPassadas[alocacoesPassadas.length - 1] 
+
+        // Regra 2: Última alocação = maior dataFim entre todas as alocações válidas
+        const ultimaAlocacao = alocacoesProf.length > 0
+            ? alocacoesProf.reduce((max, a) =>
+                new Date(a.dataFim) > new Date(max.dataFim) ? a : max)
             : null;
-        
-        // Encontrar próxima alocação futura
-        const proximasAlocacoes = alocacoesProf.filter(a => new Date(a.dataInicio) > today);
-        const proximaAlocacao = proximasAlocacoes.length > 0 ? proximasAlocacoes[0] : null;
-        
-        // Calcular período disponível
+
         let alocadoAte = ultimaAlocacao ? formatDate(ultimaAlocacao.dataFim) : '—';
-        let disponivelDe = ultimaAlocacao 
-            ? formatDate(new Date(new Date(ultimaAlocacao.dataFim).getTime() + 86400000)) 
-            : formatDate(today);
-        let disponivelAte = proximaAlocacao 
-            ? formatDate(new Date(new Date(proximaAlocacao.dataInicio).getTime() - 86400000))
+
+        // Verificar se há alocação ativa AGORA (dataInicio <= hoje <= dataFim)
+        const alocacaoAtiva = alocacoesProf.find(a =>
+            new Date(a.dataInicio + 'T00:00:00') <= hoje &&
+            new Date(a.dataFim + 'T00:00:00') >= hoje
+        ) || null;
+
+        let disponivelDeDate;
+        let proximaAlocacao;
+
+        if (alocacaoAtiva) {
+            // Atualmente alocado: fim do bloco ativo = maior dataFim entre alocações que cobrem hoje
+            const fimBlocoAtivo = alocacoesProf
+                .filter(a =>
+                    new Date(a.dataInicio + 'T00:00:00') <= hoje &&
+                    new Date(a.dataFim + 'T00:00:00') >= hoje
+                )
+                .reduce((max, a) => new Date(a.dataFim) > new Date(max.dataFim) ? a : max);
+
+            const dataFimBloco = new Date(fimBlocoAtivo.dataFim + 'T00:00:00');
+            disponivelDeDate = new Date(dataFimBloco.getTime() + 86400000);
+
+            // Próxima alocação após o fim do bloco ativo
+            proximaAlocacao = alocacoesProf.find(a =>
+                new Date(a.dataInicio + 'T00:00:00') > dataFimBloco
+            ) || null;
+        } else {
+            // Não está alocado agora (sem alocação ou lacuna antes de alocação futura)
+            disponivelDeDate = new Date(hoje);
+
+            // Próxima alocação futura
+            proximaAlocacao = alocacoesProf.find(a =>
+                new Date(a.dataInicio + 'T00:00:00') > hoje
+            ) || null;
+        }
+
+        // Regra 1: Só listar profissionais que ficam disponíveis dentro de 60 dias
+        if (disponivelDeDate > limite60dias) return;
+
+        let disponivelDe = formatDate(disponivelDeDate);
+
+        // Regra 3: Disponível ATÉ = dia anterior ao início da próxima alocação, ou ∞
+        let disponivelAte = proximaAlocacao
+            ? formatDate(new Date(new Date(proximaAlocacao.dataInicio + 'T00:00:00').getTime() - 86400000))
             : '∞';
+
         let proximaData = proximaAlocacao ? formatDate(proximaAlocacao.dataInicio) : '—';
-        let proximoProjeto = proximaAlocacao 
+        let proximoProjeto = proximaAlocacao
             ? (projetos.find(p => p.id === proximaAlocacao.projetoId)?.nome || 'Projeto Desconhecido')
             : 'Sem alocação';
-        
-        // Só incluir profissionais que estão disponíveis agora OU terão disponibilidade futura
-        if (!proximaAlocacao || new Date(proximaAlocacao.dataInicio) > today) {
-            disponiveisData.push({
-                nome: prof.nome,
-                perfil: prof.perfil || '—',
-                alocadoAte,
-                disponivelDe,
-                disponivelAte,
-                proximaData,
-                proximoProjeto,
-                isAvailableNow: !proximaAlocacao || new Date(ultimaAlocacao?.dataFim || 0) < today
-            });
-        }
+
+        disponiveisData.push({
+            nome: prof.nome,
+            perfil: prof.perfil || '—',
+            alocadoAte,
+            disponivelDe,
+            disponivelAte,
+            proximaData,
+            proximoProjeto,
+            isAvailableNow: !alocacaoAtiva
+        });
     });
     
     // Ordenar: disponíveis agora primeiro, depois por data de disponibilidade
