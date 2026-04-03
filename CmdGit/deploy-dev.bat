@@ -2,7 +2,7 @@
 chcp 65001 >nul
 REM ========================================
 REM Script: Deploy em DEV
-REM Versao: 3.0 - Corrigido e Melhorado
+REM Versao: 3.0 - Corrigido sem VIM
 REM ========================================
 
 echo.
@@ -10,6 +10,10 @@ echo ========================================
 echo   DEPLOY EM DESENVOLVIMENTO
 echo ========================================
 echo.
+
+REM Limpar swap files do VIM antes de começar
+if exist .git\.MERGE_MSG.swp del /f .git\.MERGE_MSG.swp 2>nul
+if exist .git\.COMMIT_EDITMSG.swp del /f .git\.COMMIT_EDITMSG.swp 2>nul
 
 REM Pegar branch atual ANTES de mudar
 for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD') do set CURRENT_BRANCH=%%i
@@ -69,7 +73,8 @@ if errorlevel 1 (
 )
 
 echo [4/7] Fazendo merge de %CURRENT_BRANCH% em dev...
-git merge %CURRENT_BRANCH% --no-ff -m "Merge %CURRENT_BRANCH% em dev"
+REM CORRIGIDO v3.0: Usando --no-edit para nao abrir VIM
+git merge %CURRENT_BRANCH% --no-edit --no-ff -m "Merge %CURRENT_BRANCH% em dev"
 if errorlevel 1 (
     echo.
     echo [ERRO] Conflito detectado!

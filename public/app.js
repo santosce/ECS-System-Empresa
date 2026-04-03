@@ -29,7 +29,6 @@ import {
     APP_NAME,
     debounce,
     formatDate,
-    getStatusColor,
     getCollectionPath,
     showNotification
 } from './js/core/utils.js';
@@ -51,9 +50,9 @@ import {
 } from './js/core/navigation.js';
 import {
     updateDashboard,
-    updateProfileChart,
-    updateMonthlyAvailabilityChart,
-    populateDashboardFilters
+    updateProjectGanttChart,
+    populateDashboardFilters,
+    setupDashboardEventListeners
 } from './js/modules/dashboard.js';
 import {
     renderProfissionais,
@@ -140,11 +139,6 @@ function initializeAppLogic() {
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
-        // ...
-    }
-
-    // Carregar Google Charts
-    if (typeof google !== 'undefined' && google.charts) {
         google.charts.load('current', { 'packages': ['timeline', 'corechart'], 'language': 'pt' });
         google.charts.setOnLoadCallback(() => {
             isGoogleChartsLoaded = true;
@@ -217,6 +211,7 @@ function setupFirestoreListeners() {
         setProfissionais(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderProfissionais === 'function') renderProfissionais();
         if (typeof updateDashboard === 'function') updateDashboard();
+        updateTablesView();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
         if (typeof populateAvailabilityChartFilters === 'function') populateAvailabilityChartFilters();
         if (typeof populateProfileFilters === 'function') populateProfileFilters();
@@ -230,6 +225,7 @@ function setupFirestoreListeners() {
         setProjetos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderProjetos === 'function') renderProjetos();
         if (typeof updateDashboard === 'function') updateDashboard();
+        updateTablesView();
         if (typeof populateDashboardFilters === 'function') populateDashboardFilters();
         populateTimelineFilters();
     });
@@ -240,14 +236,13 @@ function setupFirestoreListeners() {
         setAlocacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         if (typeof renderAlocacoes === 'function') renderAlocacoes();
         if (typeof updateDashboard === 'function') updateDashboard();
+        updateTablesView();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
         populateTimelineFilters();
-        
+
         setTimeout(() => {
-            if (typeof updateMonthlyAvailabilityChart === 'function') {
-                console.log('🔄 Redesenhando gráfico mensal após carregar dados...');
-                updateMonthlyAvailabilityChart();
-            }
+            updateDashboard();
+            updateTablesView();
         }, 800);
     });
     firestoreUnsubscribers.push(unsubAloc);
@@ -273,42 +268,7 @@ function clearFirestoreListeners() {
 // ===== PARTE 2 - NAVEGAÇÃO, MODAIS E RENDERIZAÇÃO =====
 
      // ===== SISTEMA DE ABAS DO DASHBOARD =====
-    const dashboardTabs = document.querySelectorAll('.dashboard-tab');
-    const dashboardTabContents = document.querySelectorAll('.dashboard-tab-content');
-
-    dashboardTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        const tabName = tab.dataset.tab;
-        
-        dashboardTabs.forEach(t => {
-            t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
-            t.classList.add('border-transparent', 'text-gray-500');
-        });
-        
-        tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
-        tab.classList.remove('border-transparent', 'text-gray-500');
-        
-        dashboardTabContents.forEach(content => {
-            content.classList.add('hidden');
-        });
-        
-        document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
-        
-        // ✅ NOVO: Redesenhar gráficos quando voltar para "Visão Geral"
-        if (tabName === 'visao-geral') {
-            setTimeout(() => {
-                if (profileChart) {
-                    profileChart.resize();
-                    profileChart.update('none');
-                }
-                if (monthlyAvailabilityChart) {
-                    monthlyAvailabilityChart.resize();
-                    monthlyAvailabilityChart.update('none');
-                }
-            }, 100);
-        }
-    });
-});
+    setupDashboardEventListeners();
 
     // Collapsible headers
     document.querySelectorAll('.collapsible-header').forEach(header => {
@@ -321,23 +281,6 @@ function clearFirestoreListeners() {
         if (wasHidden) {
             content.classList.remove('hidden');
             icon?.classList.add('rotate-180');
-            
-            // ✅ NOVO: Redesenhar gráficos após abrir collapsible
-            setTimeout(() => {
-                // Verificar se o collapsible contém gráficos
-                const chartCanvas = content.querySelector('canvas');
-                if (chartCanvas) {
-                    const chartId = chartCanvas.id;
-                    
-                    if (chartId === 'profile-distribution-chart' && profileChart) {
-                        profileChart.resize();
-                        profileChart.update('none');
-                    } else if (chartId === 'monthly-availability-chart' && monthlyAvailabilityChart) {
-                        monthlyAvailabilityChart.resize();
-                        monthlyAvailabilityChart.update('none');
-                    }
-                }
-            }, 350); // Aguardar animação CSS terminar
         } else {
             content.classList.add('hidden');
             icon?.classList.remove('rotate-180');
@@ -398,249 +341,13 @@ function clearFirestoreListeners() {
 // ===== FIM DA PARTE 2 =====
 // ===== PARTE 3 - DASHBOARD, GRÁFICOS E TIMELINE =====
 
-    // ===== DASHBOARD =====
-    let updateDashboard = function() {
-        // Métricas principais
-        const totalProfissionais = getProfissionais().filter(p => p.ativo !== 'Não').length;
-        const totalProjetos = getProjetos().length;
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const alocacoesAtivas = getAlocacoes().filter(a => {
-            const inicio = new Date(a.dataInicio + 'T00:00:00');
-            const fim = new Date(a.dataFim + 'T00:00:00');
-            return inicio <= today && fim >= today;
-        });
-
-        const profissionaisAlocadosIds = new Set(alocacoesAtivas.map(a => a.profissionalId));
-        const profissionaisAlocados = profissionaisAlocadosIds.size;
-        const profissionaisDisponiveis = totalProfissionais - profissionaisAlocados;
-
-        document.getElementById('total-profissionais') && (document.getElementById('total-profissionais').textContent = totalProfissionais);
-        document.getElementById('total-projetos') && (document.getElementById('total-projetos').textContent = totalProjetos);
-        document.getElementById('profissionais-alocados') && (document.getElementById('profissionais-alocados').textContent = profissionaisAlocados);
-        document.getElementById('profissionais-disponiveis') && (document.getElementById('profissionais-disponiveis').textContent = profissionaisDisponiveis);
-
-        // Dashboard de Profissionais
-        updateProfissionaisAllocationTable();
-        
-        // Dashboard de Projetos
-        updateProjetosTable();
-        
+    // ===== TABELAS LOCAIS DO DASHBOARD =====
+    function updateTablesView() {
         // Dashboard Planejado vs Realizado
         updatePlannedVsRealizedTable();
-        
+
         // Dashboard de Esforço
         updateEffortTable();
-        
-        // Gráficos
-        updateProfileChart();
-        updateMonthlyAvailabilityChart();
-    };
-
-    function updateProfissionaisAllocationTable() {
-    const tbody = document.getElementById('dashboard-profissionais-table');
-    if (!tbody) return;
-
-    const filterNome = document.getElementById('dashboard-filter-nome')?.value.toLowerCase() || '';
-    const filterTime = document.getElementById('dashboard-filter-time')?.value || '';
-    const filterLider = document.getElementById('dashboard-filter-lider')?.value || '';
-    const filterProjeto = document.getElementById('dashboard-filter-projeto')?.value || '';
-    const filterInicio = document.getElementById('dashboard-filter-inicio')?.value || '';
-    const filterFim = document.getElementById('dashboard-filter-fim')?.value || '';
-
-    const temFiltroPeriodo = filterInicio && filterFim;
-    let periodoInicio, periodoFim;
-    
-    if (temFiltroPeriodo) {
-        periodoInicio = new Date(filterInicio + 'T00:00:00');
-        periodoFim = new Date(filterFim + 'T00:00:00');
-    } else {
-        // Primeiro dia do mês atual
-        periodoInicio = new Date();
-        periodoInicio.setDate(1);
-        periodoInicio.setHours(0, 0, 0, 0);
-        
-        // 2 anos no futuro
-        periodoFim = new Date();
-        periodoFim.setFullYear(periodoFim.getFullYear() + 2);
-        periodoFim.setHours(23, 59, 59, 999);
-    }
-
-    let filtered = getProfissionais().filter(p => p.ativo !== 'Não');
-
-    if (filterNome) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterNome));
-    if (filterTime) filtered = filtered.filter(p => p.time === filterTime);
-    if (filterLider) filtered = filtered.filter(p => p.lider === filterLider);
-
-    const rows = filtered.map(prof => {
-        let alocacoes = getAlocacoes().filter(a => a.profissionalId === prof.id);
-
-        if (filterProjeto) {
-            alocacoes = alocacoes.filter(a => a.projetoId === filterProjeto);
-        }
-
-        // ✅ CORREÇÃO: Se filtrou por projeto e não há alocações, não mostrar profissional
-        if (filterProjeto && alocacoes.length === 0) {
-            return null;
-        }
-
-        const alocacoesNoPeriodo = alocacoes.filter(a => {
-            const inicio = new Date(a.dataInicio + 'T00:00:00');
-            const fim = new Date(a.dataFim + 'T00:00:00');
-            return inicio <= periodoFim && fim >= periodoInicio;
-        });
-
-        // ✅ CORREÇÃO: CALCULAR SOBREPOSIÇÃO REAL DIA A DIA
-        let percentualNoPeriodo = 0;
-
-        for (let d = new Date(periodoInicio); d <= periodoFim; d.setDate(d.getDate() + 1)) {
-            let percentualDia = 0;
-            
-            alocacoesNoPeriodo.forEach(aloc => {
-                const inicio = new Date(aloc.dataInicio + 'T00:00:00');
-                const fim = new Date(aloc.dataFim + 'T00:00:00');
-                
-                if (d >= inicio && d <= fim) {
-                    percentualDia += parseInt(aloc.percentual) || 0;
-                }
-            });
-            
-            if (percentualDia > percentualNoPeriodo) {
-                percentualNoPeriodo = percentualDia;
-            }
-        }
-        
-        const status = percentualNoPeriodo === 0 ? 'Disponível' : 
-                      percentualNoPeriodo >= 100 ? 'Totalmente Alocado' : 
-                      'Parcialmente Alocado';
-        const statusColor = percentualNoPeriodo === 0 ? 'text-green-600' : 
-                           percentualNoPeriodo >= 100 ? 'text-blue-600' : 
-                           'text-yellow-600';
-
-        const projetos = alocacoes.map(a => {
-            const proj = getProjetos().find(p => p.id === a.projetoId);
-            return proj?.nome || 'N/A';
-        });
-        const projetosUnicos = [...new Set(projetos)].join(', ') || 'Nenhum';
-
-        let proximaDisponibilidade;
-        
-        if (percentualNoPeriodo === 0) {
-            proximaDisponibilidade = 'Disponível agora';
-        } else if (percentualNoPeriodo >= 100) {
-            const alocacoesAtivas = alocacoesNoPeriodo
-                .filter(a => new Date(a.dataFim + 'T00:00:00') >= periodoInicio)
-                .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
-            
-            if (alocacoesAtivas.length > 0) {
-                const ultimaAlocacao = alocacoesAtivas[0];
-                const dataTermino = new Date(ultimaAlocacao.dataFim + 'T00:00:00');
-                dataTermino.setDate(dataTermino.getDate() + 1);
-                proximaDisponibilidade = `A partir de ${formatDate(dataTermino.toISOString().split('T')[0])}`;
-            } else {
-                proximaDisponibilidade = 'Verificar alocações';
-            }
-        } else {
-            const disponivel = 100 - percentualNoPeriodo;
-            proximaDisponibilidade = `${disponivel}% disponível no período`;
-        }
-
-        // ✅ FORMATAÇÃO VISUAL COM ALERTA DE SOBRE-ALOCAÇÃO
-        let alocacaoDisplay;
-        let alocacaoClass;
-        let alocacaoTitle;
-        
-        if (percentualNoPeriodo === 0) {
-            alocacaoDisplay = '0%';
-            alocacaoClass = 'text-gray-600';
-            alocacaoTitle = 'Nenhuma alocação no período';
-        } else if (percentualNoPeriodo > 100) {
-            alocacaoDisplay = '100% ⚠️';
-            alocacaoClass = 'text-red-600 font-bold';
-            alocacaoTitle = `⚠️ SOBRE-ALOCADO: ${percentualNoPeriodo}% máximo em algum dia (${alocacoesNoPeriodo.length} alocações)`;
-        } else if (percentualNoPeriodo === 100) {
-            alocacaoDisplay = '100%';
-            alocacaoClass = 'text-blue-600 font-semibold';
-            alocacaoTitle = 'Totalmente alocado no período';
-        } else {
-            alocacaoDisplay = `${percentualNoPeriodo}%`;
-            alocacaoClass = 'text-yellow-600';
-            alocacaoTitle = `${percentualNoPeriodo}% máximo de alocação no período`;
-        }
-
-        return `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
-                <td class="px-6 py-4">${prof.perfil}</td>
-                <td class="px-6 py-4">${prof.time}</td>
-                <td class="px-6 py-4">${projetosUnicos}</td>
-                <td class="px-6 py-4 ${statusColor} font-semibold">${status}</td>
-                <td class="px-6 py-4 ${alocacaoClass}" title="${alocacaoTitle}" style="cursor: help;">
-                    ${alocacaoDisplay}
-                </td>
-                <td class="px-6 py-4">${proximaDisponibilidade}</td>
-            </tr>
-        `;
-    });
-
-    tbody.innerHTML = rows.filter(Boolean).length > 0 ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="text-center p-4">Nenhum profissional encontrado.</td></tr>';
-}
-
-
-    function updateProjetosTable() {
-        const tbody = document.getElementById('dashboard-projetos-table');
-        if (!tbody) return;
-
-        const filterNome = document.getElementById('project-dashboard-filter-nome')?.value.toLowerCase() || '';
-        const filterTime = document.getElementById('project-dashboard-filter-time')?.value || '';
-        const filterLider = document.getElementById('project-dashboard-filter-lider')?.value || '';
-        
-        const selectedStatuses = Array.from(document.querySelectorAll('.project-status-filter:checked')).map(cb => cb.value);
-
-        let filtered = getProjetos();
-
-        if (selectedStatuses.length > 0) {
-            filtered = filtered.filter(p => selectedStatuses.includes(p.status));
-        }
-
-        const rows = filtered.map(proj => {
-            const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
-            
-            const profissionaisAlocados = alocacoes.map(a => {
-                const prof = getProfissionais().find(p => p.id === a.profissionalId);
-                if (!prof) return null;
-                
-                if (filterNome && !prof.nome.toLowerCase().includes(filterNome)) return null;
-                if (filterTime && prof.time !== filterTime) return null;
-                if (filterLider && prof.lider !== filterLider) return null;
-                
-                return `${prof.nome} (${a.percentual}%)`;
-            }).filter(Boolean);
-
-            if ((filterNome || filterTime || filterLider) && profissionaisAlocados.length === 0) {
-                return null;
-            }
-
-            const profissionaisList = profissionaisAlocados.length > 0 ? profissionaisAlocados.join(', ') : 'Nenhum';
-
-            return `
-                <tr class="bg-white border-b hover:bg-gray-50">
-                    <td class="px-6 py-4 font-medium text-gray-900">${proj.nome}</td>
-                    <td class="px-6 py-4">${profissionaisList}</td>
-                    <td class="px-6 py-4">${formatDate(proj.inicioPrevisto)}</td>
-                    <td class="px-6 py-4">${formatDate(proj.fimPrevisto)}</td>
-                    <td class="px-6 py-4">
-                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(proj.status)}">
-                            ${proj.status}
-                        </span>
-                    </td>
-                </tr>
-            `;
-        }).filter(Boolean);
-
-        tbody.innerHTML = rows.length > 0 ? rows.join('') : '<tr><td colspan="5" class="text-center p-4">Nenhum projeto encontrado.</td></tr>';
     }
 
     function updatePlannedVsRealizedTable() {
@@ -812,14 +519,7 @@ function clearFirestoreListeners() {
         const month = String(today.getMonth() + 1).padStart(2, '0');
         monthSelector.value = `${year}-${month}`;
         
-        // Chamar função para renderizar o gráfico com mês atual
-        updateMonthlyAvailabilityChart();
     }
-
-// Listeners para atualização do gráfico
-document.getElementById('availability-month-selector')?.addEventListener('change', updateMonthlyAvailabilityChart);
-document.getElementById('availability-chart-prof-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
-document.getElementById('availability-chart-perfil-filter')?.addEventListener('change', updateMonthlyAvailabilityChart);
 
     
     // ===== BUSCA DE DISPONIBILIDADE =====
@@ -1116,6 +816,13 @@ document.getElementById('availability-chart-perfil-filter')?.addEventListener('c
             if (isGoogleChartsLoaded) {
                 setTimeout(() => drawTimelineChart(), 150);
             }
+        });
+    });
+
+    // Redesenhar Gantt ao navegar de volta ao Dashboard
+    document.querySelectorAll('.nav-link[data-view="dashboard"]').forEach(link => {
+        link.addEventListener('click', () => {
+            setTimeout(() => updateProjectGanttChart(), 300);
         });
     });
 

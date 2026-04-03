@@ -814,3 +814,28 @@ button:disabled {
 #monthly-availability-chart-container::-webkit-scrollbar-thumb:hover {
     background: #a0aec0;
 }
+
+/* === DASHBOARD TABS === */
+.dashboard-tab {
+    transition: all 0.2s ease;
+}
+
+.dashboard-tab.active {
+    font-weight: 600;
+}
+
+/* === GANTT FILTERS === */
+.gantt-filter-btn {
+    transition: all 0.2s ease;
+}
+
+.gantt-filter-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* === CARDS HOVER === */
+.cursor-pointer:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}

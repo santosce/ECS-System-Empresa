@@ -1,312 +1,463 @@
 // ===== DASHBOARD MODULE =====
 // Módulo de dashboard com gráficos e análises
-// Extraído de app.js na refatoração v4.0.0
+// VERSÃO REORGANIZADA v4.1.0 - 2 tabs apenas (Projetos e Profissionais)
 
 import { getProfissionais, getProjetos, getAlocacoes } from '../state/app-state.js';
 import { formatDate } from '../core/utils.js';
 
 // ===== VARIÁVEIS DE GRÁFICOS =====
-let profileChart = null;
-let monthlyAvailabilityChart = null;
+let projectGanttChart = null;
 
-// Contadores de retry para evitar loop infinito
-let profileChartRetries = 0;
-let monthlyChartRetries = 0;
-const MAX_RETRIES = 10;
+// Filtro atual do Gantt
+let currentGanttFilter = 'andamento';
 
 // ===== FUNÇÃO PRINCIPAL: ATUALIZAR DASHBOARD =====
 export function updateDashboard() {
     console.log('📊 Atualizando dashboard...');
     
-    // Atualizar gráfico de perfil
-    if (typeof updateProfileChart === 'function') {
-        updateProfileChart();
-    }
+    // Atualizar visão de Projetos
+    updateProjectsView();
     
-    // Atualizar disponibilidade mensal
-    if (typeof updateMonthlyAvailabilityChart === 'function') {
-        updateMonthlyAvailabilityChart();
-    }
-    
-    // Atualizar cards de totais
-    updateDashboardTotals();
+    // Atualizar visão de Profissionais
+    updateProfessionalsView();
 }
 
-// ===== GRÁFICO DE PERFIL =====
-export function updateProfileChart() {
-    const canvas = document.getElementById('profile-distribution-chart');
-    if (!canvas) return;
-
-    // Verificar se o canvas está visível
-    const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-    if (!isVisible) {
-        if (profileChartRetries < MAX_RETRIES) {
-            console.log('⏳ Canvas do perfil não visível, tentando novamente...');
-            profileChartRetries++;
-            setTimeout(updateProfileChart, 200);
-            return;
-        } else {
-            console.log('⚠ Canvas do perfil não ficou visível após máximo de tentativas');
-            profileChartRetries = 0;
-            return;
-        }
-    }
+// ===== ATUALIZAR VISÃO DE PROJETOS =====
+function updateProjectsView() {
+    const projetos = getProjetos();
+    const today = new Date();
+    const sixMonthsAgo = new Date(today);
+    sixMonthsAgo.setMonth(today.getMonth() - 6);
     
-    // Reset do contador quando conseguir renderizar
-    profileChartRetries = 0;
-
-    const profiles = {};
-    getProfissionais().filter(p => p.ativo !== 'Não').forEach(p => {
-        profiles[p.perfil] = (profiles[p.perfil] || 0) + 1;
-    });
-
-    const labels = Object.keys(profiles);
-    const data = Object.values(profiles);
-    const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
-    if (profileChart) {
-        profileChart.destroy();
-        profileChart = null;
-    }
-
-    // Forçar dimensões do container antes de criar o gráfico
-    const container = canvas.parentElement;
-    container.style.height = '320px';
-    container.style.width = '100%';
-
-    profileChart = new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors.slice(0, labels.length),
-                borderWidth: 2,
-                borderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    top: 40,
-                    bottom: 40,
-                    left: 20,
-                    right: 20
-                }
-            },
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    align: 'center',
-                    labels: { 
-                        padding: 12,
-                        font: { size: 11 },
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        usePointStyle: true,
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map((label, i) => {
-                                    const meta = chart.getDatasetMeta(0);
-                                    const style = meta.controller.getStyle(i);
-                                    return {
-                                        text: label,
-                                        fillStyle: style.backgroundColor,
-                                        strokeStyle: style.borderColor,
-                                        lineWidth: style.borderWidth,
-                                        hidden: false,
-                                        index: i
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    },
-                    maxWidth: 1000,
-                    display: true
-                },
-                datalabels: {
-                    color: '#fff',
-                    font: { weight: 'bold', size: 14 },
-                    formatter: (value) => value,
-                    anchor: 'center',
-                    align: 'center' 
-                }
-            }
-        },
-        plugins: [ChartDataLabels]
-    });
-
-    console.log('✅ Gráfico de perfil renderizado');
+    // Total de projetos
+    const totalProjetos = projetos.length;
+    
+    // Projetos ativos (não concluídos)
+    const projetosAtivos = projetos.filter(p => p.status !== 'Concluído').length;
+    
+    // Projetos concluídos nos últimos 6 meses
+    const projetosConcluidos = projetos.filter(p => {
+        if (p.status !== 'Concluído') return false;
+        const dataFimStr = p.fimReal || p.fimPrevisto;
+        if (!dataFimStr) return false;
+        const dataFim = new Date(dataFimStr);
+        return dataFim >= sixMonthsAgo;
+    }).length;
+    
+    // Atualizar cards
+    const elTotalProj = document.querySelector('[data-metric="dash-total-projetos"]');
+    const elAtivos = document.querySelector('[data-metric="dash-projetos-ativos"]');
+    const elConcluidos = document.querySelector('[data-metric="dash-projetos-concluidos"]');
+    
+    if (elTotalProj) elTotalProj.textContent = totalProjetos;
+    if (elAtivos) elAtivos.textContent = projetosAtivos;
+    if (elConcluidos) elConcluidos.textContent = projetosConcluidos;
+    
+    // Breakdown por status
+    updateProjectStatusBreakdown();
+    
+    // Atualizar Gantt
+    updateProjectGanttChart();
 }
 
-// ===== GRÁFICO MENSAL DE DISPONIBILIDADE =====
-export function updateMonthlyAvailabilityChart() {
-    const canvas = document.getElementById('monthly-availability-chart');
-    if (!canvas) return;
+// ===== BREAKDOWN DE STATUS DE PROJETOS =====
+function updateProjectStatusBreakdown() {
+    const container = document.getElementById('project-status-breakdown');
+    if (!container) return;
+    
+    const projetos = getProjetos().filter(p => p.status !== 'Concluído');
+    const statusCount = {};
+    
+    projetos.forEach(p => {
+        const status = p.status || 'Sem Status';
+        statusCount[status] = (statusCount[status] || 0) + 1;
+    });
+    
+    const statusColors = {
+        'Planejamento': 'text-blue-600',
+        'Em Andamento': 'text-green-600',
+        'Pausado': 'text-orange-600',
+        'Sem Status': 'text-gray-600'
+    };
+    
+    container.innerHTML = Object.entries(statusCount)
+        .map(([status, count]) => `
+            <div class="flex justify-between items-center">
+                <span class="text-gray-600">${status}</span>
+                <span class="font-semibold ${statusColors[status] || 'text-gray-600'}">${count}</span>
+            </div>
+        `).join('');
+}
 
-    // Não renderizar se o dashboard não estiver visível
-    const dashboardView = document.getElementById('dashboard');
-    if (!dashboardView || !dashboardView.classList.contains('active')) return;
+// ===== GRÁFICO GANTT DE PROJETOS =====
+function updateProjectGanttChart() {
+    const container = document.getElementById('project-gantt-chart');
+    if (!container) return;
 
-    const monthSelector = document.getElementById('availability-month-selector');
-    const profFilter = document.getElementById('availability-chart-prof-filter')?.value || '';
-    const perfilFilter = document.getElementById('availability-chart-perfil-filter')?.value || '';
-
-    if (!monthSelector) return;
-
-    if (!monthSelector.value) {
-        console.log('⚠ Mês não selecionado');
+    // Aguardar Google Charts Timeline estar disponível
+    if (typeof google === 'undefined' || !google.visualization || !google.visualization.Timeline) {
+        setTimeout(updateProjectGanttChart, 500);
         return;
     }
 
-    // Verificar visibilidade
-    const isVisible = canvas.offsetWidth > 0 && canvas.offsetHeight > 0;
-    if (!isVisible) {
-        if (monthlyChartRetries < MAX_RETRIES) {
-            console.log('⏳ Canvas mensal não visível, tentando novamente...');
-            monthlyChartRetries++;
-            setTimeout(updateMonthlyAvailabilityChart, 200);
-            return;
-        } else {
-            console.log('⚠ Canvas mensal não ficou visível após máximo de tentativas');
-            monthlyChartRetries = 0;
-            return;
-        }
-    }
-    
-    monthlyChartRetries = 0;
-
-    const [year, month] = monthSelector.value.split('-').map(Number);
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-
-    let profsFiltrados = getProfissionais().filter(p => p.ativo !== 'Não');
-
-    if (profFilter) {
-        profsFiltrados = profsFiltrados.filter(p => p.id === profFilter);
+    // Aguardar container ter largura real (pode ser 0 se DOM ainda não layoutou)
+    if (container.offsetWidth === 0) {
+        setTimeout(updateProjectGanttChart, 200);
+        return;
     }
 
-    if (perfilFilter) {
-        profsFiltrados = profsFiltrados.filter(p => p.perfil === perfilFilter);
+    const projetos = getProjetos();
+    let projetosFiltrados = [];
+
+    if (currentGanttFilter === 'andamento') {
+        projetosFiltrados = projetos.filter(p => p.status === 'Em Andamento' || p.status === 'Não Iniciado');
+    } else if (currentGanttFilter === 'concluidos') {
+        projetosFiltrados = projetos.filter(p => p.status === 'Concluído');
+    } else {
+        projetosFiltrados = projetos;
     }
 
-    const dataByProf = profsFiltrados.map(prof => {
-        const alocacoesProf = getAlocacoes().filter(a => a.profissionalId === prof.id);
+    // Apenas projetos com datas previstas válidas (campos reais do Firestore)
+    projetosFiltrados = projetosFiltrados.filter(p => p.inicioPrevisto && p.fimPrevisto);
 
-        let totalHoras = 0;
-        let current = new Date(firstDay);
-        while (current <= lastDay) {
-            const dayOfWeek = current.getDay();
-            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                let porcentagemDia = 0;
-                alocacoesProf.forEach(aloc => {
-                    const inicio = new Date(aloc.dataInicio + 'T00:00:00');
-                    const fim = new Date(aloc.dataFim + 'T00:00:00');
-                    if (current >= inicio && current <= fim) {
-                        porcentagemDia += parseInt(aloc.percentual || 0);
-                    }
-                });
-                totalHoras += Math.min((porcentagemDia / 100) * 8, 8);
-            }
-            current.setDate(current.getDate() + 1);
-        }
-
-        return {
-            nome: prof.nome,
-            horas: Math.round(totalHoras * 10) / 10
-        };
-    }).filter(item => item.horas > 0);
-
-    dataByProf.sort((a, b) => b.horas - a.horas);
-
-    if (monthlyAvailabilityChart) {
-        monthlyAvailabilityChart.destroy();
-        monthlyAvailabilityChart = null;
+    if (projetosFiltrados.length === 0) {
+        container.innerHTML = '<div class="flex items-center justify-center h-64 text-gray-500">Nenhum projeto encontrado para este filtro</div>';
+        return;
     }
 
-    // Ajustar altura dinamicamente: 36px por barra, mínimo 200px
-    const BAR_HEIGHT = 36;
-    const dynamicHeight = Math.max(200, dataByProf.length * BAR_HEIGHT);
-    const wrapper = document.getElementById('monthly-availability-chart-wrapper');
-    if (wrapper) wrapper.style.height = dynamicHeight + 'px';
+    const alocacoes = getAlocacoes();
 
-    const ctx = canvas.getContext('2d');
-    monthlyAvailabilityChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: dataByProf.map(d => d.nome),
-            datasets: [{
-                label: 'Horas',
-                data: dataByProf.map(d => d.horas),
-                backgroundColor: '#4f46e5',
-                borderRadius: 4,
-                barThickness: 18
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    anchor: 'end',
-                    align: 'end',
-                    formatter: (value) => value + 'h',
-                    color: '#1f2937',
-                    font: { size: 11, weight: 'bold' }
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    ticks: { callback: (value) => value + 'h' }
-                },
-                y: {
-                    ticks: { font: { size: 12 } }
-                }
-            }
-        },
-        plugins: [ChartDataLabels]
+    const dataTable = new google.visualization.DataTable();
+    dataTable.addColumn({ type: 'string', id: 'Projeto' });
+    dataTable.addColumn({ type: 'string', id: 'Status' });
+    dataTable.addColumn({ type: 'string', role: 'tooltip', p: { html: true } });
+    dataTable.addColumn({ type: 'date',   id: 'Inicio' });
+    dataTable.addColumn({ type: 'date',   id: 'Fim' });
+
+    projetosFiltrados.forEach(projeto => {
+        const inicioStr = projeto.inicioReal || projeto.inicioPrevisto;
+        const fimStr    = projeto.fimReal    || projeto.fimPrevisto;
+        const [ay, am, ad] = inicioStr.split('-').map(Number);
+        const [zy, zm, zd] = fimStr.split('-').map(Number);
+
+        // Profissionais alocados neste projeto
+        const profsAlocados = alocacoes
+            .filter(a => a.projetoId === projeto.id)
+            .map(a => {
+                const prof = getProfissionais().find(p => p.id === a.profissionalId);
+                return prof ? `${prof.nome} (${a.percentual}%)` : null;
+            })
+            .filter(Boolean);
+
+        const labelInicio = projeto.inicioReal
+            ? `<strong>Início Real:</strong> ${formatDate(projeto.inicioReal)}<br/><strong>Início Previsto:</strong> ${formatDate(projeto.inicioPrevisto)}`
+            : `<strong>Início Previsto:</strong> ${formatDate(projeto.inicioPrevisto)}`;
+
+        const labelFim = projeto.fimReal
+            ? `<strong>Fim Real:</strong> ${formatDate(projeto.fimReal)}<br/><strong>Fim Previsto:</strong> ${formatDate(projeto.fimPrevisto)}`
+            : `<strong>Fim Previsto:</strong> ${formatDate(projeto.fimPrevisto)}`;
+
+        const tooltip = `
+            <div style="padding:10px; font-family:Arial,sans-serif; min-width:200px;">
+                <strong style="font-size:13px;">${projeto.nome}</strong><br/>
+                <hr style="margin:6px 0; border-color:#eee;"/>
+                <strong>Status:</strong> ${projeto.status || '—'}<br/>
+                ${labelInicio}<br/>
+                ${labelFim}<br/>
+                <strong>Cliente:</strong> ${projeto.cliente || '—'}<br/>
+                <strong>Tipo:</strong> ${projeto.tipo || '—'}<br/>
+                ${profsAlocados.length > 0
+                    ? `<hr style="margin:6px 0; border-color:#eee;"/><strong>Profissionais:</strong><br/>${profsAlocados.map(p => `• ${p}`).join('<br/>')}`
+                    : ''}
+            </div>
+        `;
+
+        dataTable.addRow([
+            projeto.nome,
+            projeto.status || 'Sem Status',
+            tooltip,
+            new Date(ay, am - 1, ad),
+            new Date(zy, zm - 1, zd),
+        ]);
     });
 
-    console.log('✅ Gráfico mensal renderizado');
+    const rowHeight = 42;
+    const chartHeight = Math.max(200, projetosFiltrados.length * rowHeight + 50);
+
+    const options = {
+        timeline: {
+            showRowLabels: true,
+            groupByRowLabel: false,
+            barLabelStyle: { fontSize: 11 },
+        },
+        tooltip: { isHtml: true },
+        width: container.offsetWidth,
+        height: chartHeight,
+        backgroundColor: '#fafafa',
+        colors: ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+    };
+
+    // Ajustar altura do container para evitar scroll interno desnecessário
+    container.style.height = chartHeight + 'px';
+
+    if (projectGanttChart) {
+        projectGanttChart.clearChart();
+    }
+
+    projectGanttChart = new google.visualization.Timeline(container);
+    projectGanttChart.draw(dataTable, options);
+    console.log(`📊 Gantt renderizado: ${projetosFiltrados.length} projetos, filtro: ${currentGanttFilter}`);
 }
 
-// ===== ATUALIZAR TOTAIS DOS CARDS =====
-function updateDashboardTotals() {
-    const totalProfs = getProfissionais().filter(p => p.ativo !== 'Não').length;
-    const totalProjetos = getProjetos().length;
-    
-    // Profissionais com alocações ativas
+// ===== ATUALIZAR VISÃO DE PROFISSIONAIS =====
+function updateProfessionalsView() {
+    const profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
+    const alocacoes = getAlocacoes();
     const today = new Date();
-    const profsAlocados = new Set();
     
-    getAlocacoes().forEach(aloc => {
+    // Total de profissionais
+    const totalProfs = profissionais.length;
+    
+    // Profissionais alocados hoje
+    const profsAlocadosSet = new Set();
+    alocacoes.forEach(aloc => {
         const start = new Date(aloc.dataInicio);
         const end = new Date(aloc.dataFim);
         if (start <= today && end >= today) {
-            profsAlocados.add(aloc.profissionalId);
+            profsAlocadosSet.add(aloc.profissionalId);
+        }
+    });
+    const totalAlocados = profsAlocadosSet.size;
+    const totalDesalocados = totalProfs - totalAlocados;
+    
+    // Percentuais
+    const percentAlocados = totalProfs > 0 ? Math.round((totalAlocados / totalProfs) * 100) : 0;
+    const percentDesalocados = 100 - percentAlocados;
+    
+    // Atualizar cards
+    const elTotalProfs = document.querySelector('[data-metric="dash-total-profs"]');
+    const elTotalProfsPerfil = document.querySelector('[data-metric="dash-total-profs-perfil"]');
+    const elAlocados = document.querySelector('[data-metric="dash-profs-alocados"]');
+    const elDesalocados = document.querySelector('[data-metric="dash-profs-desalocados"]');
+    const elPercentAlocados = document.querySelector('[data-metric="dash-percent-alocados"]');
+    const elPercentDesalocados = document.querySelector('[data-metric="dash-percent-desalocados"]');
+    
+    if (elTotalProfs) elTotalProfs.textContent = totalProfs;
+    if (elTotalProfsPerfil) elTotalProfsPerfil.textContent = totalProfs;
+    if (elAlocados) elAlocados.textContent = totalAlocados;
+    if (elDesalocados) elDesalocados.textContent = totalDesalocados;
+    if (elPercentAlocados) elPercentAlocados.textContent = percentAlocados;
+    if (elPercentDesalocados) elPercentDesalocados.textContent = percentDesalocados;
+    
+    // Breakdown por perfil
+    updateProfileBreakdown();
+
+    // Atualizar opções do select de perfil (caso dados ainda não existissem no setup)
+    const perfilSelect = document.getElementById('disp-filter-perfil');
+    if (perfilSelect) {
+        const valorAtual = perfilSelect.value;
+        const perfis = [...new Set(profissionais.map(p => p.perfil).filter(Boolean))].sort();
+        perfilSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
+            perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
+        perfilSelect.value = valorAtual;
+    }
+
+    // Renderizar tabela de disponíveis
+    renderAvailableProfessionals();
+}
+
+// ===== BREAKDOWN POR PERFIL =====
+function updateProfileBreakdown() {
+    const container = document.getElementById('profile-breakdown');
+    if (!container) return;
+    
+    const profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
+    const perfilCount = {};
+    
+    profissionais.forEach(p => {
+        const perfil = p.perfil || 'Sem Perfil';
+        perfilCount[perfil] = (perfilCount[perfil] || 0) + 1;
+    });
+    
+    const perfilColors = {
+        'Desenvolvedor': 'text-blue-600',
+        'Designer': 'text-pink-600',
+        'PO': 'text-orange-600',
+        'QA': 'text-green-600',
+        'Arquiteto': 'text-purple-600'
+    };
+    
+    container.innerHTML = Object.entries(perfilCount)
+        .map(([perfil, count]) => `
+            <div class="flex justify-between items-center">
+                <span class="text-gray-600">${perfil}</span>
+                <span class="font-semibold ${perfilColors[perfil] || 'text-gray-600'}">${count}</span>
+            </div>
+        `).join('');
+}
+
+// ===== RENDERIZAR TABELA DE PROFISSIONAIS DISPONÍVEIS =====
+function renderAvailableProfessionals() {
+    const tbody = document.getElementById('profissionais-disponiveis-table');
+    if (!tbody) return;
+
+    const filterNome  = document.getElementById('disp-filter-nome')?.value.toLowerCase().trim() || '';
+    const filterPerfil = document.getElementById('disp-filter-perfil')?.value || '';
+
+    let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
+    if (filterNome)   profissionais = profissionais.filter(p => p.nome.toLowerCase().includes(filterNome));
+    if (filterPerfil) profissionais = profissionais.filter(p => p.perfil === filterPerfil);
+    const alocacoes = getAlocacoes();
+    const projetos = getProjetos();
+    const today = new Date();
+    
+    const disponiveisData = [];
+    
+    profissionais.forEach(prof => {
+        const alocacoesProf = alocacoes
+            .filter(a => a.profissionalId === prof.id)
+            .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
+        
+        // Encontrar última alocação que terminou (passado ou hoje)
+        const alocacoesPassadas = alocacoesProf.filter(a => new Date(a.dataFim) <= today);
+        const ultimaAlocacao = alocacoesPassadas.length > 0 
+            ? alocacoesPassadas[alocacoesPassadas.length - 1] 
+            : null;
+        
+        // Encontrar próxima alocação futura
+        const proximasAlocacoes = alocacoesProf.filter(a => new Date(a.dataInicio) > today);
+        const proximaAlocacao = proximasAlocacoes.length > 0 ? proximasAlocacoes[0] : null;
+        
+        // Calcular período disponível
+        let alocadoAte = ultimaAlocacao ? formatDate(ultimaAlocacao.dataFim) : '—';
+        let disponivelDe = ultimaAlocacao 
+            ? formatDate(new Date(new Date(ultimaAlocacao.dataFim).getTime() + 86400000)) 
+            : formatDate(today);
+        let disponivelAte = proximaAlocacao 
+            ? formatDate(new Date(new Date(proximaAlocacao.dataInicio).getTime() - 86400000))
+            : '∞';
+        let proximaData = proximaAlocacao ? formatDate(proximaAlocacao.dataInicio) : '—';
+        let proximoProjeto = proximaAlocacao 
+            ? (projetos.find(p => p.id === proximaAlocacao.projetoId)?.nome || 'Projeto Desconhecido')
+            : 'Sem alocação';
+        
+        // Só incluir profissionais que estão disponíveis agora OU terão disponibilidade futura
+        if (!proximaAlocacao || new Date(proximaAlocacao.dataInicio) > today) {
+            disponiveisData.push({
+                nome: prof.nome,
+                perfil: prof.perfil || '—',
+                alocadoAte,
+                disponivelDe,
+                disponivelAte,
+                proximaData,
+                proximoProjeto,
+                isAvailableNow: !proximaAlocacao || new Date(ultimaAlocacao?.dataFim || 0) < today
+            });
         }
     });
     
-    const totalAlocados = profsAlocados.size;
-    const totalDisponiveis = totalProfs - totalAlocados;
+    // Ordenar: disponíveis agora primeiro, depois por data de disponibilidade
+    disponiveisData.sort((a, b) => {
+        if (a.isAvailableNow && !b.isAvailableNow) return -1;
+        if (!a.isAvailableNow && b.isAvailableNow) return 1;
+        return a.nome.localeCompare(b.nome);
+    });
     
-    // Atualizar DOM
-    const totalProfsEl = document.querySelector('[data-metric="total-profissionais"]');
-    const totalProjEl = document.querySelector('[data-metric="total-projetos"]');
-    const totalAlocEl = document.querySelector('[data-metric="profissionais-alocados"]');
-    const totalDispEl = document.querySelector('[data-metric="profissionais-disponiveis"]');
+    // Atualizar alerta
+    updateAvailabilityAlert(disponiveisData);
     
-    if (totalProfsEl) totalProfsEl.textContent = totalProfs;
-    if (totalProjEl) totalProjEl.textContent = totalProjetos;
-    if (totalAlocEl) totalAlocEl.textContent = totalAlocados;
-    if (totalDispEl) totalDispEl.textContent = totalDisponiveis;
+    // Renderizar tabela
+    if (disponiveisData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum profissional disponível no momento</td></tr>';
+        return;
+    }
+    
+    const perfilBadges = {
+        'Desenvolvedor': 'bg-blue-100 text-blue-800',
+        'Designer': 'bg-pink-100 text-pink-800',
+        'PO': 'bg-orange-100 text-orange-800',
+        'QA': 'bg-green-100 text-green-800',
+        'Arquiteto': 'bg-purple-100 text-purple-800'
+    };
+    
+    tbody.innerHTML = disponiveisData.map(prof => `
+        <tr class="border-b hover:bg-gray-50">
+            <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
+            <td class="px-6 py-4">
+                <span class="px-2 py-1 text-xs font-semibold rounded-full ${perfilBadges[prof.perfil] || 'bg-gray-100 text-gray-800'}">
+                    ${prof.perfil}
+                </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500">${prof.alocadoAte}</td>
+            <td class="px-6 py-4 text-sm">
+                <span class="font-semibold ${prof.disponivelAte === '∞' ? 'text-red-600' : 'text-gray-700'}">
+                    ${prof.disponivelDe} — ${prof.disponivelAte}
+                </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500">${prof.proximaData}</td>
+            <td class="px-6 py-4 text-sm ${prof.proximoProjeto === 'Sem alocação' ? 'text-red-600 italic' : 'text-gray-700'}">
+                ${prof.proximoProjeto}
+            </td>
+        </tr>
+    `).join('');
+    
+    console.log(`✅ ${disponiveisData.length} profissionais disponíveis renderizados`);
+}
+
+// ===== ATUALIZAR ALERTA DE DISPONIBILIDADE =====
+function updateAvailabilityAlert(disponiveisData) {
+    const alert = document.getElementById('availability-alert');
+    const alertText = document.getElementById('availability-alert-text');
+    
+    if (!alert || !alertText) return;
+    
+    const disponiveisAgora = disponiveisData.filter(p => p.isAvailableNow).length;
+    
+    if (disponiveisAgora > 0) {
+        alert.classList.remove('hidden');
+        alertText.textContent = `${disponiveisAgora} profissiona${disponiveisAgora > 1 ? 'is' : 'l'} ${disponiveisAgora > 1 ? 'estão' : 'está'} disponível${disponiveisAgora > 1 ? 'is' : ''} para alocação imediata.`;
+    } else {
+        alert.classList.add('hidden');
+    }
+}
+
+// ===== EXPORTAR PROFISSIONAIS DISPONÍVEIS PARA EXCEL =====
+function exportAvailableProfessionals() {
+    const tbody = document.getElementById('profissionais-disponiveis-table');
+    if (!tbody || tbody.rows.length === 0) {
+        alert('Nenhum dado para exportar');
+        return;
+    }
+    
+    // Preparar dados
+    const data = [
+        ['Nome', 'Perfil', 'Alocado até', 'Disponível de - até', 'Próxima Alocação', 'Projeto']
+    ];
+    
+    Array.from(tbody.rows).forEach(row => {
+        const cells = row.cells;
+        if (cells.length >= 6) {
+            data.push([
+                cells[0].textContent.trim(),
+                cells[1].textContent.trim(),
+                cells[2].textContent.trim(),
+                cells[3].textContent.trim(),
+                cells[4].textContent.trim(),
+                cells[5].textContent.trim()
+            ]);
+        }
+    });
+    
+    // Criar workbook
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Disponíveis');
+    
+    // Download
+    const hoje = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `profissionais_disponiveis_${hoje}.xlsx`);
+    
+    console.log('✅ Excel exportado');
 }
 
 // ===== POPULAR FILTROS DO DASHBOARD =====
@@ -360,7 +511,6 @@ export function populateDashboardFilters() {
         elProjLider.value = cur;
     }
 
-    // Checkboxes de status (preserva os que estavam marcados)
     const statusContainer = document.getElementById('project-dashboard-filter-status');
     if (statusContainer) {
         const marcados = new Set(
@@ -377,10 +527,82 @@ export function populateDashboardFilters() {
     console.log('📋 Filtros do dashboard populados');
 }
 
+// ===== SETUP EVENT LISTENERS =====
+export function setupDashboardEventListeners() {
+    console.log('🎯 Configurando event listeners do dashboard...');
+    
+    // Tabs do dashboard
+    document.querySelectorAll('.dashboard-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            
+            // Atualizar tabs
+            document.querySelectorAll('.dashboard-tab').forEach(t => {
+                t.classList.remove('active', 'border-indigo-600', 'text-indigo-600');
+                t.classList.add('border-transparent', 'text-gray-500');
+            });
+            tab.classList.add('active', 'border-indigo-600', 'text-indigo-600');
+            tab.classList.remove('border-transparent', 'text-gray-500');
+            
+            // Atualizar conteúdo
+            document.querySelectorAll('.dashboard-tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`tab-${targetTab}`)?.classList.remove('hidden');
+            
+            // Atualizar gráficos se necessário
+            if (targetTab === 'projetos') {
+                setTimeout(updateProjectGanttChart, 250);
+            }
+            
+            console.log(`📑 Tab ativa: ${targetTab}`);
+        });
+    });
+    
+    // Filtros do Gantt
+    document.querySelectorAll('.gantt-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentGanttFilter = btn.dataset.filter;
+            
+            // Atualizar botões
+            document.querySelectorAll('.gantt-filter-btn').forEach(b => {
+                b.classList.remove('bg-indigo-600', 'text-white');
+                b.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+            });
+            btn.classList.add('bg-indigo-600', 'text-white');
+            btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+            
+            // Atualizar gráfico
+            updateProjectGanttChart();
+        });
+    });
+    
+    // Botão de exportar
+    const exportBtn = document.getElementById('export-disponiveis-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportAvailableProfessionals);
+    }
+
+    // Filtros de Profissionais Disponíveis
+    document.getElementById('disp-filter-nome')?.addEventListener('input', renderAvailableProfessionals);
+    document.getElementById('disp-filter-perfil')?.addEventListener('change', renderAvailableProfessionals);
+
+    // Popular select de perfis
+    const perfilSelect = document.getElementById('disp-filter-perfil');
+    if (perfilSelect) {
+        const perfis = [...new Set(getProfissionais().filter(p => p.ativo !== 'Não').map(p => p.perfil).filter(Boolean))].sort();
+        perfilSelect.innerHTML = '<option value="">Todos os Perfis</option>' +
+            perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
+    }
+
+    console.log('✅ Event listeners do dashboard configurados');
+}
+
 // ===== EXPORT DEFAULT =====
+export { updateProjectGanttChart };
+
 export default {
     updateDashboard,
-    updateProfileChart,
-    updateMonthlyAvailabilityChart,
-    populateDashboardFilters
+    populateDashboardFilters,
+    setupDashboardEventListeners
 };

@@ -2,7 +2,7 @@
 chcp 65001 >nul
 REM ========================================
 REM Script: Deploy em PRODUCAO
-REM Versao: 3.0 - Corrigido e Melhorado
+REM Versao: 3.0 - Corrigido sem VIM
 REM ========================================
 
 echo.
@@ -22,7 +22,7 @@ set /p CONFIRMA="TEM CERTEZA que deseja continuar? (S/N): "
 
 if /i not "%CONFIRMA%"=="S" (
     echo.
-    echo Operacao cancelada - Decisao sábia!
+    echo Operacao cancelada - Decisao sabia!
     pause
     exit /b 0
 )
@@ -41,6 +41,10 @@ echo ========================================
 echo   PUBLICANDO VERSAO %VERSION%
 echo ========================================
 echo.
+
+REM Limpar swap files do VIM antes de começar
+if exist .git\.MERGE_MSG.swp del /f .git\.MERGE_MSG.swp 2>nul
+if exist .git\.COMMIT_EDITMSG.swp del /f .git\.COMMIT_EDITMSG.swp 2>nul
 
 echo [1/8] Salvando alteracoes pendentes...
 git add . >nul 2>&1
@@ -69,7 +73,8 @@ echo [5/8] Atualizando branch main...
 git pull origin main
 
 echo [6/8] Fazendo merge de dev em main...
-git merge dev --no-ff -m "Release v%VERSION%"
+REM CORRIGIDO v3.0: Usando --no-edit para nao abrir VIM
+git merge dev --no-edit --no-ff -m "Release v%VERSION%"
 if errorlevel 1 (
     echo.
     echo [ERRO] Conflito detectado!
