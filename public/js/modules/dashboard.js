@@ -220,11 +220,13 @@ function updateProfessionalsView() {
     // Total de profissionais
     const totalProfs = profissionais.length;
     
-    // Profissionais alocados hoje
+    // Profissionais alocados hoje (apenas ativos)
+    const profsAtivosIds = new Set(profissionais.map(p => p.id));
     const profsAlocadosSet = new Set();
     alocacoes.forEach(aloc => {
-        const start = new Date(aloc.dataInicio);
-        const end = new Date(aloc.dataFim);
+        if (!profsAtivosIds.has(aloc.profissionalId)) return;
+        const start = new Date(aloc.dataInicio + 'T00:00:00');
+        const end = new Date(aloc.dataFim + 'T00:00:00');
         if (start <= today && end >= today) {
             profsAlocadosSet.add(aloc.profissionalId);
         }
@@ -316,10 +318,11 @@ function renderAvailableProfessionals() {
     const limite60dias = new Date(hoje);
     limite60dias.setDate(hoje.getDate() + 60);
 
-    const disponiveisData = [];
+    const disponivelAgoraData  = [];
+    const disponivelEmBreveData = [];
 
     profissionais.forEach(prof => {
-        // Regra 2: Descartar projetos com status Concluído
+        // Descartar alocações em projetos Concluídos
         const alocacoesProf = alocacoes
             .filter(a => {
                 if (a.profissionalId !== prof.id) return false;
@@ -329,101 +332,152 @@ function renderAvailableProfessionals() {
             })
             .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
 
-        // Regra 2: Última alocação = maior dataFim entre todas as alocações válidas
+        // Última alocação (maior dataFim)
         const ultimaAlocacao = alocacoesProf.length > 0
             ? alocacoesProf.reduce((max, a) =>
                 new Date(a.dataFim) > new Date(max.dataFim) ? a : max)
             : null;
+        const alocadoAte = ultimaAlocacao ? formatDate(ultimaAlocacao.dataFim) : '—';
 
-        let alocadoAte = ultimaAlocacao ? formatDate(ultimaAlocacao.dataFim) : '—';
-
-        // Verificar se há alocação ativa AGORA (dataInicio <= hoje <= dataFim)
-        const alocacaoAtiva = alocacoesProf.find(a =>
+        // Alocações ativas hoje e % total alocado
+        const alocacoesAtivas = alocacoesProf.filter(a =>
             new Date(a.dataInicio + 'T00:00:00') <= hoje &&
             new Date(a.dataFim + 'T00:00:00') >= hoje
-        ) || null;
+        );
+        const percentualAtual = alocacoesAtivas.reduce((sum, a) => sum + (parseInt(a.percentual) || 0), 0);
 
-        let disponivelDeDate;
-        let proximaAlocacao;
+        // Helper: soma % de todas as alocações que começam em determinada data
+        const pctNaData = (dataInicio) => alocacoesProf
+            .filter(a => a.dataInicio === dataInicio)
+            .reduce((sum, a) => sum + (parseInt(a.percentual) || 0), 0);
 
-        if (alocacaoAtiva) {
-            // Atualmente alocado: fim do bloco ativo = maior dataFim entre alocações que cobrem hoje
-            const fimBlocoAtivo = alocacoesProf
-                .filter(a =>
-                    new Date(a.dataInicio + 'T00:00:00') <= hoje &&
-                    new Date(a.dataFim + 'T00:00:00') >= hoje
-                )
-                .reduce((max, a) => new Date(a.dataFim) > new Date(max.dataFim) ? a : max);
+        if (percentualAtual < 100) {
+            // ── GRUPO A: Disponíveis Agora (0% ou parcialmente alocado) ──
+            const percentualDisponivel = 100 - percentualAtual;
 
-            const dataFimBloco = new Date(fimBlocoAtivo.dataFim + 'T00:00:00');
-            disponivelDeDate = new Date(dataFimBloco.getTime() + 86400000);
-
-            // Próxima alocação após o fim do bloco ativo
-            proximaAlocacao = alocacoesProf.find(a =>
-                new Date(a.dataInicio + 'T00:00:00') > dataFimBloco
-            ) || null;
-        } else {
-            // Não está alocado agora (sem alocação ou lacuna antes de alocação futura)
-            disponivelDeDate = new Date(hoje);
-
-            // Próxima alocação futura
-            proximaAlocacao = alocacoesProf.find(a =>
+            // Próxima alocação futura (para exibir na coluna "Próxima Alocação")
+            const proximaAlocacao = alocacoesProf.find(a =>
                 new Date(a.dataInicio + 'T00:00:00') > hoje
             ) || null;
+
+            // "Disponível até" = dia anterior à primeira data em que o % acumulado atinge 100%
+            // Agrupa alocações futuras por data de início e acumula %
+            const futurosPorData = {};
+            alocacoesProf
+                .filter(a => new Date(a.dataInicio + 'T00:00:00') > hoje)
+                .forEach(a => {
+                    futurosPorData[a.dataInicio] = (futurosPorData[a.dataInicio] || 0) + (parseInt(a.percentual) || 0);
+                });
+
+            let pctAcumulado = percentualAtual;
+            let disponivelAte = '∞';
+            for (const data of Object.keys(futurosPorData).sort()) {
+                pctAcumulado += futurosPorData[data];
+                if (pctAcumulado >= 100) {
+                    disponivelAte = formatDate(new Date(new Date(data + 'T00:00:00').getTime() - 86400000));
+                    break;
+                }
+            }
+
+            const percentualProxima = proximaAlocacao
+                ? pctNaData(proximaAlocacao.dataInicio) + '%'
+                : '—';
+
+            const proximaData    = proximaAlocacao ? formatDate(proximaAlocacao.dataInicio) : '—';
+            const proximoProjeto = proximaAlocacao
+                ? (projetos.find(p => p.id === proximaAlocacao.projetoId)?.nome || 'Projeto Desconhecido')
+                : 'Sem alocação';
+
+            disponivelAgoraData.push({
+                nome: prof.nome,
+                perfil: prof.perfil || '—',
+                alocadoAte,
+                percentualAtual: percentualAtual + '%',
+                disponivelDe: formatDate(hoje),
+                disponivelAte,
+                percentualDisponivel: percentualDisponivel + '%',
+                proximaData,
+                percentualProxima,
+                proximoProjeto,
+                isAvailableNow: true
+            });
+        } else {
+            // ── GRUPO B: 100% alocado agora — verificar se libera em ≤ 60 dias ──
+            if (alocacoesAtivas.length === 0) return;
+
+            const fimBlocoAtivo = alocacoesAtivas
+                .reduce((max, a) => new Date(a.dataFim) > new Date(max.dataFim) ? a : max);
+            const dataFimBloco   = new Date(fimBlocoAtivo.dataFim + 'T00:00:00');
+            const disponivelDeDate = new Date(dataFimBloco.getTime() + 86400000);
+
+            if (disponivelDeDate > limite60dias) return;
+
+            // Próxima alocação após o fim do bloco ativo
+            const proximaAlocacao = alocacoesProf.find(a =>
+                new Date(a.dataInicio + 'T00:00:00') > dataFimBloco
+            ) || null;
+
+            // Sem gap real: próxima começa no mesmo dia ou antes da disponibilidade
+            if (proximaAlocacao) {
+                const proximaDataInicio = new Date(proximaAlocacao.dataInicio + 'T00:00:00');
+                if (proximaDataInicio <= disponivelDeDate) return;
+            }
+
+            const disponivelAte = proximaAlocacao
+                ? formatDate(new Date(new Date(proximaAlocacao.dataInicio + 'T00:00:00').getTime() - 86400000))
+                : '∞';
+
+            const percentualProxima = proximaAlocacao
+                ? pctNaData(proximaAlocacao.dataInicio) + '%'
+                : '—';
+
+            const proximaData    = proximaAlocacao ? formatDate(proximaAlocacao.dataInicio) : '—';
+            const proximoProjeto = proximaAlocacao
+                ? (projetos.find(p => p.id === proximaAlocacao.projetoId)?.nome || 'Projeto Desconhecido')
+                : 'Sem alocação';
+
+            disponivelEmBreveData.push({
+                nome: prof.nome,
+                perfil: prof.perfil || '—',
+                alocadoAte,
+                percentualAtual: '100%',
+                disponivelDe: formatDate(disponivelDeDate),
+                disponivelAte,
+                percentualDisponivel: '100%',
+                proximaData,
+                percentualProxima,
+                proximoProjeto,
+                isAvailableNow: false
+            });
         }
-
-        // Regra 1: Só listar profissionais que ficam disponíveis dentro de 60 dias
-        if (disponivelDeDate > limite60dias) return;
-
-        let disponivelDe = formatDate(disponivelDeDate);
-
-        // Regra 3: Disponível ATÉ = dia anterior ao início da próxima alocação, ou ∞
-        let disponivelAte = proximaAlocacao
-            ? formatDate(new Date(new Date(proximaAlocacao.dataInicio + 'T00:00:00').getTime() - 86400000))
-            : '∞';
-
-        let proximaData = proximaAlocacao ? formatDate(proximaAlocacao.dataInicio) : '—';
-        let proximoProjeto = proximaAlocacao
-            ? (projetos.find(p => p.id === proximaAlocacao.projetoId)?.nome || 'Projeto Desconhecido')
-            : 'Sem alocação';
-
-        disponiveisData.push({
-            nome: prof.nome,
-            perfil: prof.perfil || '—',
-            alocadoAte,
-            disponivelDe,
-            disponivelAte,
-            proximaData,
-            proximoProjeto,
-            isAvailableNow: !alocacaoAtiva
-        });
     });
-    
-    // Ordenar: disponíveis agora primeiro, depois por data de disponibilidade
-    disponiveisData.sort((a, b) => {
-        if (a.isAvailableNow && !b.isAvailableNow) return -1;
-        if (!a.isAvailableNow && b.isAvailableNow) return 1;
-        return a.nome.localeCompare(b.nome);
-    });
-    
-    // Atualizar alerta
+
+    disponivelAgoraData.sort((a, b)   => a.nome.localeCompare(b.nome));
+    disponivelEmBreveData.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    const disponiveisData = [...disponivelAgoraData, ...disponivelEmBreveData];
+
     updateAvailabilityAlert(disponiveisData);
-    
-    // Renderizar tabela
+
     if (disponiveisData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum profissional disponível no momento</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-gray-500">Nenhum profissional disponível no momento</td></tr>';
         return;
     }
-    
+
     const perfilBadges = {
         'Desenvolvedor': 'bg-blue-100 text-blue-800',
-        'Designer': 'bg-pink-100 text-pink-800',
-        'PO': 'bg-orange-100 text-orange-800',
-        'QA': 'bg-green-100 text-green-800',
-        'Arquiteto': 'bg-purple-100 text-purple-800'
+        'Designer':      'bg-pink-100 text-pink-800',
+        'PO':            'bg-orange-100 text-orange-800',
+        'QA':            'bg-green-100 text-green-800',
+        'Arquiteto':     'bg-purple-100 text-purple-800'
     };
-    
-    tbody.innerHTML = disponiveisData.map(prof => `
+
+    const renderRow = (prof) => {
+        const pctAtualNum = parseInt(prof.percentualAtual) || 0;
+        const pctDispNum  = parseInt(prof.percentualDisponivel) || 0;
+        const corAtual    = pctAtualNum >= 100 ? 'text-red-600' : pctAtualNum > 0 ? 'text-amber-600' : 'text-green-600';
+        const corDisp     = pctDispNum === 100 ? 'text-green-600' : pctDispNum > 0 ? 'text-amber-600' : 'text-red-600';
+        return `
         <tr class="border-b hover:bg-gray-50">
             <td class="px-6 py-4 font-medium text-gray-900">${prof.nome}</td>
             <td class="px-6 py-4">
@@ -432,19 +486,42 @@ function renderAvailableProfessionals() {
                 </span>
             </td>
             <td class="px-6 py-4 text-sm text-gray-500">${prof.alocadoAte}</td>
+            <td class="px-6 py-4 text-sm text-center">
+                <span class="font-semibold ${corAtual}">${prof.percentualAtual}</span>
+            </td>
             <td class="px-6 py-4 text-sm">
                 <span class="font-semibold ${prof.disponivelAte === '∞' ? 'text-red-600' : 'text-gray-700'}">
                     ${prof.disponivelDe} — ${prof.disponivelAte}
                 </span>
             </td>
+            <td class="px-6 py-4 text-sm text-center">
+                <span class="font-semibold ${corDisp}">${prof.percentualDisponivel}</span>
+            </td>
             <td class="px-6 py-4 text-sm text-gray-500">${prof.proximaData}</td>
+            <td class="px-6 py-4 text-sm text-center">
+                <span class="${prof.percentualProxima === '—' ? 'text-gray-400' : 'font-semibold text-gray-700'}">${prof.percentualProxima}</span>
+            </td>
             <td class="px-6 py-4 text-sm ${prof.proximoProjeto === 'Sem alocação' ? 'text-red-600 italic' : 'text-gray-700'}">
                 ${prof.proximoProjeto}
             </td>
-        </tr>
-    `).join('');
-    
-    console.log(`✅ ${disponiveisData.length} profissionais disponíveis renderizados`);
+        </tr>`;
+    };
+
+    let html = '';
+
+    if (disponivelAgoraData.length > 0) {
+        html += `<tr class="bg-green-50"><td colspan="9" class="px-6 py-2 text-xs font-bold text-green-700 uppercase tracking-wider">Disponíveis Agora</td></tr>`;
+        html += disponivelAgoraData.map(renderRow).join('');
+    }
+
+    if (disponivelEmBreveData.length > 0) {
+        html += `<tr class="bg-amber-50"><td colspan="9" class="px-6 py-2 text-xs font-bold text-amber-700 uppercase tracking-wider">Disponíveis em Breve</td></tr>`;
+        html += disponivelEmBreveData.map(renderRow).join('');
+    }
+
+    tbody.innerHTML = html;
+
+    console.log(`✅ ${disponivelAgoraData.length} disponíveis agora, ${disponivelEmBreveData.length} em breve`);
 }
 
 // ===== ATUALIZAR ALERTA DE DISPONIBILIDADE =====
@@ -474,19 +551,24 @@ function exportAvailableProfessionals() {
     
     // Preparar dados
     const data = [
-        ['Nome', 'Perfil', 'Alocado até', 'Disponível de - até', 'Próxima Alocação', 'Projeto']
+        ['Nome', 'Perfil', 'Alocado até', '% Alocado', 'Disponível de - até', '% Disponível', 'Próxima Alocação', '% Próx. Alocação', 'Projeto']
     ];
-    
+
     Array.from(tbody.rows).forEach(row => {
         const cells = row.cells;
-        if (cells.length >= 6) {
+        // Pular linhas de separador de grupo (colspan=9)
+        if (cells.length === 1) return;
+        if (cells.length >= 9) {
             data.push([
                 cells[0].textContent.trim(),
                 cells[1].textContent.trim(),
                 cells[2].textContent.trim(),
                 cells[3].textContent.trim(),
                 cells[4].textContent.trim(),
-                cells[5].textContent.trim()
+                cells[5].textContent.trim(),
+                cells[6].textContent.trim(),
+                cells[7].textContent.trim(),
+                cells[8].textContent.trim()
             ]);
         }
     });

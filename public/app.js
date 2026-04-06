@@ -305,6 +305,7 @@ function clearFirestoreListeners() {
     document.getElementById('prazos-filter-status-projeto')?.addEventListener('change', updatePlannedVsRealizedTable);
     
     document.getElementById('esforco-filter-projeto')?.addEventListener('input', debounce(updateEffortTable, 300));
+    document.getElementById('esforco-filter-status')?.addEventListener('change', updateEffortTable);
     
     // ===== POPULADORES DE FILTROS =====
 
@@ -445,13 +446,12 @@ function clearFirestoreListeners() {
 
         // ✅ APLICAR FILTRO
         const filterProjeto = document.getElementById('esforco-filter-projeto')?.value.toLowerCase() || '';
+        const filterStatus  = document.getElementById('esforco-filter-status')?.value || '';
 
         let filtered = getProjetos().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-        // Filtro por nome do projeto
-        if (filterProjeto) {
-            filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
-        }
+        if (filterProjeto) filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterProjeto));
+        if (filterStatus)  filtered = filtered.filter(p => p.status === filterStatus);
 
         const rows = filtered.map(proj => {
             const alocacoes = getAlocacoes().filter(a => a.projetoId === proj.id);
