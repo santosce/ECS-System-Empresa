@@ -220,11 +220,13 @@ function updateProfessionalsView() {
     // Total de profissionais
     const totalProfs = profissionais.length;
     
-    // Profissionais alocados hoje
+    // Profissionais alocados hoje (apenas ativos)
+    const profsAtivosIds = new Set(profissionais.map(p => p.id));
     const profsAlocadosSet = new Set();
     alocacoes.forEach(aloc => {
-        const start = new Date(aloc.dataInicio);
-        const end = new Date(aloc.dataFim);
+        if (!profsAtivosIds.has(aloc.profissionalId)) return;
+        const start = new Date(aloc.dataInicio + 'T00:00:00');
+        const end = new Date(aloc.dataFim + 'T00:00:00');
         if (start <= today && end >= today) {
             profsAlocadosSet.add(aloc.profissionalId);
         }
@@ -353,14 +355,29 @@ function renderAvailableProfessionals() {
             // ── GRUPO A: Disponíveis Agora (0% ou parcialmente alocado) ──
             const percentualDisponivel = 100 - percentualAtual;
 
-            // Próxima alocação futura
+            // Próxima alocação futura (para exibir na coluna "Próxima Alocação")
             const proximaAlocacao = alocacoesProf.find(a =>
                 new Date(a.dataInicio + 'T00:00:00') > hoje
             ) || null;
 
-            const disponivelAte = proximaAlocacao
-                ? formatDate(new Date(new Date(proximaAlocacao.dataInicio + 'T00:00:00').getTime() - 86400000))
-                : '∞';
+            // "Disponível até" = dia anterior à primeira data em que o % acumulado atinge 100%
+            // Agrupa alocações futuras por data de início e acumula %
+            const futurosPorData = {};
+            alocacoesProf
+                .filter(a => new Date(a.dataInicio + 'T00:00:00') > hoje)
+                .forEach(a => {
+                    futurosPorData[a.dataInicio] = (futurosPorData[a.dataInicio] || 0) + (parseInt(a.percentual) || 0);
+                });
+
+            let pctAcumulado = percentualAtual;
+            let disponivelAte = '∞';
+            for (const data of Object.keys(futurosPorData).sort()) {
+                pctAcumulado += futurosPorData[data];
+                if (pctAcumulado >= 100) {
+                    disponivelAte = formatDate(new Date(new Date(data + 'T00:00:00').getTime() - 86400000));
+                    break;
+                }
+            }
 
             const percentualProxima = proximaAlocacao
                 ? pctNaData(proximaAlocacao.dataInicio) + '%'
