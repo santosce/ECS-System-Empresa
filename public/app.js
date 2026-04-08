@@ -93,6 +93,11 @@ import {
     initializeTimelineModule
 } from './js/modules/timeline.js';
 import { initializeKimaiModule } from './js/modules/kimai.js';
+import {
+    initializeCapacityChart,
+    renderCapacityChart,
+    populateCapacityFilters
+} from './js/modules/capacity-chart.js';
 
 
 
@@ -136,6 +141,8 @@ function initializeAppLogic() {
     initializeTimelineModule();
     // Inicializar módulo de kimai
     initializeKimaiModule();
+    // Inicializar módulo de gráfico de capacidade
+    initializeCapacityChart();
 
     // Carregar Google Charts
     if (typeof google !== 'undefined' && google.charts) {
@@ -217,6 +224,8 @@ function setupFirestoreListeners() {
         if (typeof populateProfileFilters === 'function') populateProfileFilters();
         populateTimelineFilters();
         if (typeof populateProfissionaisFilters === 'function') populateProfissionaisFilters();
+        populateCapacityFilters();
+        renderCapacityChart();
     });
     firestoreUnsubscribers.push(unsubProf);
 
@@ -239,6 +248,7 @@ function setupFirestoreListeners() {
         updateTablesView();
         if (typeof populateAlocacoesFilters === 'function') populateAlocacoesFilters();
         populateTimelineFilters();
+        renderCapacityChart();
 
         setTimeout(() => {
             updateDashboard();
