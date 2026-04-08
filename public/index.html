@@ -439,7 +439,48 @@
 								</table>
 							</div>
 						</div>
-					</div>	
+					</div>
+
+                    <!-- Visão de Capacidade dos Profissionais -->
+                    <div class="bg-white p-6 rounded-lg shadow-sm mb-6">
+                        <div class="flex justify-between items-center cursor-pointer collapsible-header mb-4">
+                            <h2 class="text-xl font-semibold text-gray-800">📊 Visão de Capacidade dos Profissionais</h2>
+                            <svg class="w-6 h-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                        <div class="collapsible-content hidden">
+                            <p class="text-sm text-gray-600 mb-4">Barras azuis = alocação até 100% | Barras vermelhas = superalocação acima de 100%</p>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Período:</label>
+                                    <select id="capacity-period-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                                        <option value="current">Mês Atual</option>
+                                        <option value="next">Próximo Mês</option>
+                                        <option value="quarter">Próximo Trimestre</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Ordenar por:</label>
+                                    <select id="capacity-sort-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                                        <option value="deviation">Maior Desvio</option>
+                                        <option value="name">Nome</option>
+                                        <option value="overallocation">Superalocação</option>
+                                        <option value="underallocation">Subalocação</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Profissional:</label>
+                                    <select id="capacity-professional-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                                        <option value="all">Todos os Profissionais</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="height: 500px;">
+                                <canvas id="capacity-chart-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Análise de Esforço -->
                     <div class="bg-white p-6 rounded-lg shadow-sm">
