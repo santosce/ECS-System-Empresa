@@ -67,9 +67,9 @@ export function renderCapacityChart() {
         startDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
         endDate   = new Date(today.getFullYear(), today.getMonth() + 2, 0);
     } else {
-        // quarter
-        startDate = new Date(today);
-        endDate   = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
+        // quarter: próximos 3 meses completos a partir do próximo mês
+        startDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        endDate   = new Date(today.getFullYear(), today.getMonth() + 4, 0);
     }
 
     const startStr = startDate.toISOString().split('T')[0];
