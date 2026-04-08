@@ -11,7 +11,7 @@ function calculateProfessionalCapacity(startDate, endDate, profissionalId = null
     const start = new Date(startDate + 'T00:00:00');
     const end   = new Date(endDate   + 'T00:00:00');
 
-    let profissionais = getProfissionais().filter(p => p.ativo !== 'Não');
+    let profissionais = getProfissionais().filter(p => p.ativo === 'Sim');
     if (profissionalId) {
         profissionais = profissionais.filter(p => p.id === profissionalId);
     }
@@ -108,6 +108,9 @@ export function renderCapacityChart() {
     const ctx = document.getElementById('capacity-chart-canvas');
     if (!ctx) return;
 
+    const wrapper = document.getElementById('capacity-chart-wrapper');
+    if (wrapper) wrapper.style.height = Math.max(500, data.length * 35) + 'px';
+
     capacityChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -118,14 +121,18 @@ export function renderCapacityChart() {
                     data: baseAllocation,
                     backgroundColor: '#3b82f6',
                     borderColor: '#2563eb',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    barPercentage: 0.5,
+                    categoryPercentage: 0.7
                 },
                 {
                     label: 'Superalocação (acima de 100%)',
                     data: overAllocation,
                     backgroundColor: '#ef4444',
                     borderColor: '#dc2626',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    barPercentage: 0.5,
+                    categoryPercentage: 0.7
                 }
             ]
         },
@@ -189,7 +196,7 @@ export function populateCapacityFilters() {
     if (!profSelect) return;
 
     const profissionais = getProfissionais()
-        .filter(p => p.ativo !== 'Não')
+        .filter(p => p.ativo === 'Sim')
         .sort((a, b) => a.nome.localeCompare(b.nome));
 
     profSelect.innerHTML = '<option value="all">Todos os Profissionais</option>' +
