@@ -24,13 +24,18 @@ export function drawTimelineChart() {
     const filterProf   = document.getElementById('timeline-filter-profissional')?.value || '';
     const filterProj   = document.getElementById('timeline-filter-projeto')?.value || '';
     const filterPerfil = document.getElementById('timeline-filter-perfil')?.value || '';
+    const filterStatus = document.getElementById('timeline-filter-status')?.value || '';
+    const filterTime   = document.getElementById('timeline-filter-time')?.value || '';
 
     let alocacoes = getAlocacoes().filter(a => {
         const prof = getProfissionais().find(p => p.id === a.profissionalId);
+        const proj = getProjetos().find(p => p.id === a.projetoId);
         if (!prof || prof.ativo === 'Não' || !prof.nome) return false;
-        if (filterProf   && a.profissionalId !== filterProf)  return false;
-        if (filterProj   && a.projetoId      !== filterProj)  return false;
+        if (filterProf   && a.profissionalId !== filterProf)   return false;
+        if (filterProj   && a.projetoId      !== filterProj)   return false;
         if (filterPerfil && prof.perfil       !== filterPerfil) return false;
+        if (filterStatus && proj?.status      !== filterStatus) return false;
+        if (filterTime   && prof.time         !== filterTime)   return false;
         return true;
     });
 
@@ -41,7 +46,7 @@ export function drawTimelineChart() {
     });
 
     if (alocacoes.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 pt-16">Nenhuma alocação encontrada para os filtros selecionados.</p>';
+        container.innerHTML = '<p class="text-center text-gray-500 pt-16">Nenhum projeto encontrado para os filtros selecionados.</p>';
         return;
     }
 
@@ -117,15 +122,19 @@ export function drawTimelineChart() {
 
     google.visualization.events.addListener(chart, 'select', function () {
         const selection = chart.getSelection();
-        if (selection.length > 0) {
-            const row = selection[0].row;
-            if (row === 0) return; // linha invisível
-            const alocacao = alocacoes[row - 1];
-            if (alocacao) {
-                setOpenedFromTimeline(true);
-                openAlocacaoModal(alocacao);
-            }
+        if (selection.length === 0) return;
+
+        const row = selection[0].row;
+        if (row === null || row === undefined) return;
+
+        const alocacao = alocacoes[row];
+        if (!alocacao) {
+            console.warn('⚠️ Nenhuma alocação encontrada para a barra selecionada (row:', row, ')');
+            return;
         }
+
+        openAlocacaoModal(alocacao);
+        setOpenedFromTimeline(true);
     });
 
     chart.draw(dataTable, options);
@@ -311,6 +320,8 @@ export function populateTimelineFilters() {
     const profSelect   = document.getElementById('timeline-filter-profissional');
     const projSelect   = document.getElementById('timeline-filter-projeto');
     const perfilSelect = document.getElementById('timeline-filter-perfil');
+    const timeSelect   = document.getElementById('timeline-filter-time');
+    const resetBtn     = document.getElementById('timeline-reset-filters');
 
     if (profSelect) {
         const ativos = [...getProfissionais()]
@@ -336,11 +347,37 @@ export function populateTimelineFilters() {
             perfis.map(pf => `<option value="${pf}">${pf}</option>`).join('');
     }
 
-    [profSelect, projSelect, perfilSelect].forEach(select => {
-        select?.addEventListener('change', () => {
-            if (typeof google !== 'undefined' && google.visualization) drawTimelineChart();
-        });
+    if (timeSelect) {
+        // Só lista times que possuem pelo menos uma alocação na timeline
+        const profsComAlocacao = new Set(getAlocacoes().map(a => a.profissionalId));
+        const times = [...new Set(getProfissionais()
+            .filter(p => p.ativo !== 'Não' && p.time && profsComAlocacao.has(p.id))
+            .map(p => p.time)
+        )].sort();
+        timeSelect.innerHTML = '<option value="">Todos os Times</option>' +
+            times.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+
+    const redraw = () => {
+        if (typeof google !== 'undefined' && google.visualization) drawTimelineChart();
+    };
+
+    [profSelect, projSelect, perfilSelect, timeSelect].forEach(select => {
+        select?.addEventListener('change', redraw);
     });
+
+    resetBtn?.addEventListener('click', () => {
+        if (profSelect)   profSelect.value   = '';
+        if (projSelect)   projSelect.value   = '';
+        if (perfilSelect) perfilSelect.value = '';
+        if (timeSelect)   timeSelect.value   = '';
+        const statusSelect = document.getElementById('timeline-filter-status');
+        if (statusSelect) statusSelect.value = 'Em Andamento';
+        redraw();
+    });
+
+    // Listener para o filtro de status (definido no HTML com opções estáticas)
+    document.getElementById('timeline-filter-status')?.addEventListener('change', redraw);
 }
 
 // ===== INICIALIZAR MÓDULO =====

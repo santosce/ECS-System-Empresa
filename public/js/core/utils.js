@@ -5,7 +5,7 @@
 import { getAppId } from '../config/firebase-config.js';
 
 // ===== CONSTANTES =====
-export const APP_VERSION = '4.2.0';
+export const APP_VERSION = '4.2.1';
 export const APP_NAME = 'ECS System';
 
 // ===== FUNÇÃO PARA DEBOUNCE =====
